@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}风险 · 因子工作台{% endblock %}
+{% block body %}
+<p class="kicker">这一页看的是归因页那个组合，不是某一个因子</p>
+<h1>超额是不是因为押了市值或某个行业？</h1>
+{% if not payload.ready %}
+  <div class="note">还没有分析结果。</div>
+{% else %}
+  <div class="note">横条是归因页那个组合相对市值基准的暴露。条在零线右边，表示比基准更偏这一项。平均截面 R² {{ num(payload.barra.r2, 3) }}，表示这些暴露能解释多少下月收益。{% if payload.industry_tilt %} {{ payload.industry_tilt }}{% endif %}</div>
+  <div class="cards">
+    <div class="card"><span>主动波动</span><strong>{{ pct(payload.barra.total_vol) }}</strong></div>
+    <div class="card"><span>因子部分</span><strong>{{ pct(payload.barra.factor_vol) }}</strong></div>
+    <div class="card"><span>特质部分</span><strong>{{ pct(payload.barra.specific_vol) }}</strong></div>
+    <div class="card"><span>平均 R²</span><strong>{{ num(payload.barra.r2, 3) }}</strong></div>
+  </div>
+  {% if exposure %}<img class="chart" src="{{ exposure }}" alt="主动暴露" />{% endif %}
+  <h2>因子收益</h2>
+  <table>
+    <thead>
+      <tr><th class="left">因子</th><th>年化收益</th><th>年化波动</th><th>t</th></tr>
+    </thead>
+    <tbody>
+      {% for row in payload.barra.factors %}
+      <tr>
+        <td class="left">{{ row.name }}</td>
+        <td class="{{ 'pos' if row.ann_ret >= 0 else 'neg' }}">{{ pct(row.ann_ret) }}</td>
+        <td>{{ pct(row.ann_vol) }}</td>
+        <td>{{ num(row.t, 2) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

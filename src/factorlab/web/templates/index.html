@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}单因子检验 · 因子工作台{% endblock %}
+{% block body %}
+{% if not payload.ready %}
+  <h1>还没有分析结果</h1>
+  <div class="note">先在项目目录运行 <code>python -m factorlab --demo --out output/demo</code>，再刷新本页。</div>
+{% else %}
+  <h1>8 次分开的检验，每次只问一个因子</h1>
+  <p class="scoreboard">
+    {% for item in payload.scoreboard %}
+    <span class="pill {{ item.tone }}">{{ item.label }} {{ item.n }}</span>
+    {% endfor %}
+  </p>
+  <div class="note">
+    本页不检验某一个总策略。每一行是一次独立检验：这个因子在月末已经能算出来的值，去掉市值和行业之后，能不能预测<strong>下个月的个股收益</strong>。
+    样本是 {{ payload.universe.n_stocks }} 只合成股票，{{ payload.universe.start }} 至 {{ payload.universe.end }}，共 {{ payload.universe.n_dates }} 个月末。数字用来核对计算，不是市场结论。
+  </div>
+  <div class="cards">
+    <div class="card"><span>这一页在做</span><strong>单因子检验</strong><span>一行一个因子</span></div>
+    <div class="card"><span>预测的东西</span><strong>下月收益</strong><span>不是当天，也不是当年</span></div>
+    <div class="card"><span>先去掉</span><strong>市值和行业</strong><span>避免只是小盘或行业贝塔</span></div>
+    <div class="card"><span>怎样算支持</span><strong>IC 的 t ≥ 1.96</strong><span>并且多空收益为正</span></div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th class="left">检验问题</th>
+        <th class="left">结论</th>
+        <th>策略 IC</th>
+        <th>t</th>
+        <th>多空年化</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in payload.summary %}
+      <tr class="clickable" onclick="location.href='/factor/{{ row.name }}'">
+        <td class="left"><a href="/factor/{{ row.name }}">{{ row.question }}</a><div class="sub">{{ row.label }}。{{ row.because }}</div></td>
+        <td class="left"><span class="pill {{ row.verdict_tone }}">{{ row.verdict }}</span></td>
+        <td>{{ num(row.ic, 3) }}</td>
+        <td>{{ num(row.t, 2) }}</td>
+        <td class="{{ 'pos' if row.ls_ann >= 0 else 'neg' }}">{{ pct(row.ls_ann) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h2>另外两页问的是另一个组合</h2>
+  <div class="cards">
+    <a class="card linkcard" href="/brinson"><span>归因页</span><strong>超额从哪来</strong><span>八个因子合成的前 20% 组合，对市值基准</span></a>
+    <a class="card linkcard" href="/barra"><span>风险页</span><strong>押了什么暴露</strong><span>还是这一个组合，不是某一行因子</span></a>
+  </div>
+  <div class="actions">
+    <a href="/download/report.html">完整 HTML 报告</a>
+    <a href="/download/report.pdf">PDF</a>
+  </div>
+{% endif %}
+{% endblock %}

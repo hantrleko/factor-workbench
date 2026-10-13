@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}因子工作台{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}" />
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <div class="brand">因子工作台<small>先看单个因子能不能预测下月收益</small></div>
+      <nav>
+        <a href="/" class="{{ 'active' if page == 'home' else '' }}">8 个因子</a>
+        <a href="/brinson" class="{{ 'active' if page == 'brinson' else '' }}">组合超额从哪来</a>
+        <a href="/barra" class="{{ 'active' if page == 'barra' else '' }}">组合押了什么</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+    {% block body %}{% endblock %}
+  </main>
+</body>
+</html>

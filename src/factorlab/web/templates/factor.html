@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ spec.question }}{% endblock %}
+{% block body %}
+<p><a href="/">回到 8 次检验</a></p>
+<p class="kicker">这次只检验这一个因子：{{ spec.label }}</p>
+<h1>{{ spec.question }}</h1>
+{% if row %}
+<p class="verdict-line"><span class="pill {{ row.verdict_tone }}">{{ row.verdict }}</span> {{ row.because }}</p>
+{% endif %}
+{% if row and row.groups %}
+<h2>五组年化，先看该买的那一组</h2>
+<p class="hint">第 1 组是因子值最低的股票，第 5 组是最高的。标成「该买」的一组，才是上面那个问题要持有的一端。</p>
+<div class="card bars">
+  {% for g in row.groups %}
+  <div class="bar-row">
+    <span class="bar-name">第 {{ g.group }} 组{% if g.is_long %} · 该买{% elif g.is_short %} · 该空{% endif %}</span>
+    <span class="track"><span class="fill {{ g.tone }}{% if g.is_long %} long{% endif %}" style="width: {{ '%.0f'|format(g.width) }}%"></span></span>
+    <span class="bar-value {{ g.tone }}">{{ pct(g.ann_return) }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+<div class="cards">
+  <div class="card"><span>检验对象</span><strong>{{ spec.label }}</strong><span>{{ spec.family }}</span></div>
+  <div class="card"><span>预测目标</span><strong>下个月收益</strong><span>形成月本身不算进去</span></div>
+  <div class="card"><span>多头是谁</span><strong>{{ spec.direction_text }}</strong></div>
+  <div class="card"><span>样本</span><strong>{{ payload.universe.n_stocks }} 只</strong><span>{{ payload.universe.start }} 至 {{ payload.universe.end }}</span></div>
+</div>
+<div class="card">
+  <p>{{ spec.definition }}</p>
+  <p>算法：{{ spec.formula }}</p>
+  {% if row %}
+  <p>策略 Rank IC {{ num(row.ic, 3) }}，t {{ num(row.t, 2) }}。五分组里，假设要买的那一组减掉另一端，年化 {{ pct(row.ls_ann) }}，最大回撤 {{ pct(row.ls_mdd) }}。</p>
+  {% endif %}
+  {% if ortho %}
+  <p>市值和行业已经从因子里去掉。去掉之后，残差和市值的相关、以及各行业残差均值，最大绝对值都是 {{ num(ortho.size_corr, 2) }} 这一量级，说明没有把市值或行业误当成因子。</p>
+  {% endif %}
+</div>
+<h2>每个月，排序和下月收益是否一致</h2>
+<p class="hint">纵轴是 Rank IC。大于 0 表示这个月按假设排序是对的。虚线是所有月份的平均。</p>
+{% if charts.ic %}<img class="chart" src="{{ charts.ic }}" alt="IC 序列" />{% endif %}
+<h2>因子能管住后面几个月</h2>
+<p class="hint">横轴 1 是下个月，2 是再下一个月。柱子变矮，说明信号很快过时。</p>
+{% if charts.decay %}<img class="chart" src="{{ charts.decay }}" alt="IC 衰减" />{% endif %}
+<h2>五组里，该买的那一组是否在最上面</h2>
+<p class="hint">股票按因子从低到高分成 5 组。图例里标了「多头」的，才是这个问题要买的一组。它应该高于其他组。</p>
+<div class="grid">
+  {% if charts.nav5 %}<img class="chart" src="{{ charts.nav5 }}" alt="五分组净值" />{% endif %}
+  {% if charts.ls5 %}<img class="chart" src="{{ charts.ls5 }}" alt="五分组多空" />{% endif %}
+</div>
+<h2>分成十组之后，结论是否还在</h2>
+<div class="grid">
+  {% if charts.nav10 %}<img class="chart" src="{{ charts.nav10 }}" alt="十分组净值" />{% endif %}
+  {% if charts.ls10 %}<img class="chart" src="{{ charts.ls10 }}" alt="十分组多空" />{% endif %}
+</div>
+{% endblock %}

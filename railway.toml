@@ -1,0 +1,10 @@
+[build]
+builder = "NIXPACKS"
+
+[build.env]
+NIXPACKS_PYTHON_VERSION = "3.12"
+
+[deploy]
+startCommand = "PYTHONPATH=src gunicorn -w 1 --timeout 120 -b 0.0.0.0:$PORT factorlab.web.wsgi:app"
+healthcheckPath = "/"
+restartPolicyType = "ON_FAILURE"

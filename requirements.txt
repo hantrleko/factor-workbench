@@ -1,0 +1,11 @@
+polars>=1.0
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+jinja2>=3.1
+fpdf2>=2.7
+flask>=3.0
+gunicorn>=22.0
+pytest>=8.0
+# 可选：系统装有 Pango/GTK 时用于 HTML 直出 PDF
+# weasyprint>=60

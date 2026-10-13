@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "factorlab"
+version = "0.1.0"
+description = "轻量级多因子检验与 Brinson/Barra 业绩归因工作台"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "polars>=1.0",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+    "jinja2>=3.1",
+    "fpdf2>=2.7",
+    "flask>=3.0",
+    "gunicorn>=22.0",
+]
+
+[project.optional-dependencies]
+pdf = ["weasyprint>=60"]
+
+[project.scripts]
+factorlab = "factorlab.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+factorlab = ["report/*.j2"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

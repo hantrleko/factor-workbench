@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>{{ title }}</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  :root {
+    --ink: #1c2430;
+    --muted: #5e675f;
+    --line: #e3ddd2;
+    --paper: #f6f3ed;
+    --card: #fffdf9;
+    --teal: #0f5f63;
+    --copper: #a24b32;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--ink);
+    background: var(--paper);
+    font-family: "Source Han Sans SC", "Noto Sans SC", "Microsoft YaHei", "SimHei", sans-serif;
+    font-size: 13.5px; line-height: 1.55;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 22px 64px; }
+  header.cover {
+    background: #12343b; color: #f6f3ed;
+    padding: 36px 32px 28px; border-radius: 8px;
+  }
+  header.cover h1 { margin: 0 0 8px; font-size: 28px; font-weight: 650; letter-spacing: 0.02em; }
+  header.cover p { margin: 0; color: #d5ddd4; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 12px; color: #e7efe6; }
+  .meta span { border-top: 1px solid rgba(255,255,255,.25); padding-top: 6px; min-width: 120px; }
+  h2 { font-size: 20px; margin: 32px 0 10px; }
+  h3 { font-size: 16px; margin: 22px 0 8px; color: var(--teal); }
+  .note, .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; margin: 12px 0;
+  }
+  .note { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); margin: 8px 0 16px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: right; vertical-align: top; }
+  th:first-child, td:first-child, th.left, td.left { text-align: left; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; background: #f3efe7; }
+  img.chart { width: 100%; height: auto; background: #fbfaf7; border: 1px solid var(--line); border-radius: 6px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .factor { break-before: page; page-break-before: always; }
+  .tag { display: inline-block; font-size: 12px; color: var(--teal); border: 1px solid #b7d0cc; padding: 1px 8px; border-radius: 99px; }
+  code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+  footer { margin-top: 28px; color: var(--muted); font-size: 12px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="cover">
+    <h1>{{ title }}</h1>
+    <p>{{ subtitle }}</p>
+    <div class="meta">
+      <span>样本 {{ universe.start }} 至 {{ universe.end }}</span>
+      <span>股票 {{ universe.n_stocks }} 只</span>
+      <span>行业 {{ universe.n_industries }} 个</span>
+      <span>月末 {{ universe.n_dates }} 期</span>
+      <span>生成于 {{ generated_at }}</span>
+    </div>
+  </header>
+
+  <div class="note">{{ universe.note }}</div>
+
+  <h2>汇总</h2>
+  <p>策略 Rank IC 已按研究假设调整方向：大于 0 表示「该做多的一端」在下月收益上排序更高。分组回测使用市值与行业中性化后的因子，多空为多头组减空头组。</p>
+  <table>
+    <thead>
+      <tr>
+        <th class="left">因子</th>
+        <th class="left">类别</th>
+        <th>策略 IC</th>
+        <th>IC_IR</th>
+        <th>t</th>
+        <th>NW t</th>
+        <th>IC&gt;0</th>
+        <th>多空年化</th>
+        <th>最大回撤</th>
+        <th>单边换手</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in summary_rows %}
+      <tr>
+        <td class="left">{{ row.label }}</td>
+        <td class="left">{{ row.family }}</td>
+        <td>{{ row.ic | num(3) }}</td>
+        <td>{{ row.ir | num(2) }}</td>
+        <td>{{ row.t | num(2) }}</td>
+        <td>{{ row.nw_t | num(2) }}</td>
+        <td>{{ row.hit | pct(0) }}</td>
+        <td>{{ row.ls_ann | pct }}</td>
+        <td>{{ row.ls_mdd | pct }}</td>
+        <td>{{ row.turnover | pct }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>中性化正交性</h2>
+  <p>每个月末把因子对截距、对数市值和行业哑元做市值平方根加权最小二乘。残差应与市值的加权相关接近 0，行业加权均值也应接近 0。这是设计矩阵维度是否对齐的直接检查。</p>
+  <table>
+    <thead>
+      <tr>
+        <th class="left">因子</th>
+        <th>市值加权相关绝对值的最大截面</th>
+        <th>行业加权均值绝对值的最大截面</th>
+        <th>检查期数</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in ortho_rows %}
+      <tr>
+        <td class="left">{{ row.label }}</td>
+        <td>{{ row.size_corr | num(6) }}</td>
+        <td>{{ row.industry_mean | num(6) }}</td>
+        <td>{{ row.n | num(0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% for factor in factors %}
+  <section class="factor">
+    <h2>{{ factor.label }} <span class="tag">{{ factor.family }}</span></h2>
+    <div class="card">
+      <p>{{ factor.definition }}</p>
+      <p>公式：<code>{{ factor.formula }}</code></p>
+      <p>方向：{{ factor.direction_text }}。原始策略 Rank IC {{ factor.ic_raw | num(3) }}，中性化后 {{ factor.ic | num(3) }}，IC_IR {{ factor.ir | num(2) }}，样本 {{ factor.n | num(0) }} 期。</p>
+    </div>
+    <div class="grid">
+      {% if factor.charts.ic %}<img class="chart" src="{{ factor.charts.ic }}" alt="IC 序列" />{% endif %}
+      {% if factor.charts.decay %}<img class="chart" src="{{ factor.charts.decay }}" alt="IC 衰减" />{% endif %}
+    </div>
+    <table>
+      <thead>
+        <tr><th class="left">远期月数</th><th>策略 Rank IC</th><th>IC_IR</th><th>NW t</th><th>期数</th></tr>
+      </thead>
+      <tbody>
+        {% for row in factor.decay %}
+        <tr>
+          <td class="left">{{ row.horizon }}</td>
+          <td>{{ row.mean | num(3) }}</td>
+          <td>{{ row.ir | num(2) }}</td>
+          <td>{{ row.nw_t | num(2) }}</td>
+          <td>{{ row.n | num(0) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% for bt in factor.backtests %}
+    <h3>{{ bt.n_groups }} 分组</h3>
+    <p>多头第 {{ bt.long_group }} 组，空头第 {{ bt.short_group }} 组。多空年化 {{ bt.ann_return | pct }}，波动 {{ bt.ann_vol | pct }}，夏普 {{ bt.sharpe | num(2) }}，最大回撤 {{ bt.max_drawdown | pct }}，月均单边换手 {{ bt.turnover | pct }}。</p>
+    <div class="grid">
+      {% if bt.nav %}<img class="chart" src="{{ bt.nav }}" alt="分组净值" />{% endif %}
+      {% if bt.ls %}<img class="chart" src="{{ bt.ls }}" alt="多空净值" />{% endif %}
+    </div>
+    <table>
+      <thead>
+        <tr><th class="left">分组</th><th>年化收益</th><th>年化波动</th><th>夏普</th><th>最大回撤</th><th>月均换手</th></tr>
+      </thead>
+      <tbody>
+        {% for g in bt.groups %}
+        <tr>
+          <td class="left">第 {{ g.group | num(0) }} 组{% if g.group == bt.long_group %} · 多头{% endif %}</td>
+          <td>{{ g.ann_return | pct }}</td>
+          <td>{{ g.ann_vol | pct }}</td>
+          <td>{{ g.sharpe | num(2) }}</td>
+          <td>{{ g.max_drawdown | pct }}</td>
+          <td>{{ g.avg_turnover | pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endfor %}
+  </section>
+  {% endfor %}
+
+  <section class="factor">
+    <h2>Brinson 业绩归因</h2>
+    <div class="card">
+      <p>{{ brinson.rule }}</p>
+      <p>模型为 Brinson–Fachler。多期效应用 Carino 系数链接，因此下表配置、选股、交互之和等于累计组合收益减累计基准收益。</p>
+    </div>
+    <table>
+      <thead>
+        <tr><th class="left">项目</th><th>累计</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="left">组合收益</td><td>{{ brinson.portfolio_return | pct }}</td></tr>
+        <tr><td class="left">基准收益</td><td>{{ brinson.benchmark_return | pct }}</td></tr>
+        <tr><td class="left">主动收益</td><td>{{ brinson.active_return | pct }}</td></tr>
+        <tr><td class="left">配置</td><td>{{ brinson.allocation | pct }}</td></tr>
+        <tr><td class="left">选股</td><td>{{ brinson.selection | pct }}</td></tr>
+        <tr><td class="left">交互</td><td>{{ brinson.interaction | pct }}</td></tr>
+      </tbody>
+    </table>
+    <div class="grid">
+      {% if brinson.waterfall %}<img class="chart" src="{{ brinson.waterfall }}" alt="归因瀑布" />{% endif %}
+      {% if brinson.timeline %}<img class="chart" src="{{ brinson.timeline }}" alt="分月效应" />{% endif %}
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="left">行业</th><th>平均组合权重</th><th>平均基准权重</th>
+          <th>配置</th><th>选股</th><th>交互</th><th>合计</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in brinson.groups %}
+        <tr>
+          <td class="left">{{ row.group }}</td>
+          <td>{{ row.wp | pct }}</td>
+          <td>{{ row.wb | pct }}</td>
+          <td>{{ row.allocation | pct }}</td>
+          <td>{{ row.selection | pct }}</td>
+          <td>{{ row.interaction | pct }}</td>
+          <td>{{ row.total | pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="factor">
+    <h2>Barra 风格风险</h2>
+    <div class="card">
+      <p>截面回归解释下一月收益。行业因子收益按市值加权和约束为 0，国家因子代表市场。风格因子是市值加权 z-score，系数是每 1 个标准差暴露的月收益。回归权重为市值平方根。平均截面 R² 为 {{ barra.r2 | num(3) }}。</p>
+      <p>{{ barra.note }}</p>
+    </div>
+    <table>
+      <thead>
+        <tr><th class="left">因子</th><th>年化收益</th><th>年化波动</th><th>t</th></tr>
+      </thead>
+      <tbody>
+        {% for row in barra.factors %}
+        <tr>
+          <td class="left">{{ row.name }}</td>
+          <td>{{ row.ann_ret | pct }}</td>
+          <td>{{ row.ann_vol | pct }}</td>
+          <td>{{ row.t | num(2) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if barra.exposure %}
+    <img class="chart" src="{{ barra.exposure }}" alt="主动暴露" />
+    <p>主动组合年化波动 {{ barra.total_vol | pct }}，其中因子部分 {{ barra.factor_vol | pct }}，特质部分 {{ barra.specific_vol | pct }}。特质方差向截面中位数收缩 50%。样本 {{ barra.n_periods | num(0) }} 期，因子 {{ barra.n_factors | num(0) }} 个。</p>
+    {% endif %}
+  </section>
+
+  <section class="factor">
+    <h2>口径附录</h2>
+    <div class="card">
+      <p>应计利润采用 Sloan（1996）的资产负债表定义，折旧摊销、资本开支、净利润和营业收入取最近四个已披露财季。同比资产负债表项目取四个财季之前的同一公司报告。披露日晚于调仓日的报表不会进入因子。</p>
+      <p>Amihud（2002）非流动性是形成月内日频绝对收益除以成交额的均值，至少 10 个交易日。特质波动率是形成月内日收益对前一日市值加权市场收益的回归残差标准差，至少 15 个交易日，分母为 N−2。短期反转是形成月收益的相反数（Jegadeesh, 1990）。</p>
+      <p>Rank IC 是因子与远期收益的 Spearman 相关。IC_IR 是 IC 均值除以样本标准差。t 使用普通标准误，NW t 使用 Bartlett 核。1 个月 IC 的滞后取 1；h 个月重叠收益的滞后取 h−1。</p>
+      <p>分组用序位排名均分，组 1 为因子值最低。换手率是目标权重的单边换手 0.5·Σ|Δw|，第一期不计入均值，也不把收益漂移算进换手。</p>
+      <p>Brinson–Fachler（1985）的配置项用行业基准收益减去基准总收益。基准未持有的行业，其基准收益用基准总收益代替，新持仓的主动收益记入交互项。Carino（1999）链接保证多期效应加总等于累计主动收益。</p>
+      <p>年化收益由净值复利按 12 期折算，年化波动按月收益标准差乘以根号 12。夏普比率假设无风险利率为 0。最大回撤从期初净值 1 起算。</p>
+    </div>
+  </section>
+  <footer>本报告由 factorlab 生成，用于因子检验与归因核对，不构成投资建议。</footer>
+</div>
+</body>
+</html>
