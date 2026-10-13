@@ -20,7 +20,11 @@ python -m factorlab --demo --out output/demo
 python -m factorlab.web --out output/demo --port 5057
 ```
 
-浏览器访问 http://127.0.0.1:5057 。页面从该目录的 `summary.json` 和 `figures` 读取，可在总览、单因子、归因和风险之间切换。仓库里的 `demo/` 是同一份结果，线上部署没有本机 `output/demo` 时用它。
+本机地址是 http://127.0.0.1:5057 。没有本机 `output/demo` 时，程序改用仓库里的 `demo/`。
+
+线上站点：https://factor-workbench-production.up.railway.app
+
+源码：https://github.com/hantrleko/factor-workbench
 
 外部数据：
 
