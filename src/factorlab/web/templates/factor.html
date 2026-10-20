@@ -9,16 +9,37 @@
 {% endif %}
 {% if row and row.groups %}
 <h2>五组年化，先看该买的那一组</h2>
-<p class="hint">第 1 组是因子值最低的股票，第 5 组是最高的。标成「该买」的一组，才是上面那个问题要持有的一端。</p>
+<p class="hint">几何年化，由月度毛收益复利，未扣费。正值向右，负值向左，中间是零。第 1 组因子值最低，第 5 组最高。标成「该买」的一组才是这个问题要持有的一端。</p>
 <div class="card bars">
+  <div class="bar-scale"><span></span><span>负 ← 0 → 正</span><span></span></div>
   {% for g in row.groups %}
   <div class="bar-row">
     <span class="bar-name">第 {{ g.group }} 组{% if g.is_long %} · 该买{% elif g.is_short %} · 该空{% endif %}</span>
-    <span class="track"><span class="fill {{ g.tone }}{% if g.is_long %} long{% endif %}" style="width: {{ '%.0f'|format(g.width) }}%"></span></span>
+    <span class="axis" title="第{{ g.group }}组几何年化 {{ pct(g.ann_return) }}，未扣费">
+      <span class="neg-side">{% if g.ann_return < 0 %}<span class="fill neg{% if g.is_long %} long{% endif %}" style="width: {{ '%.0f'|format(g.width) }}%"></span>{% endif %}</span>
+      <span class="pos-side">{% if g.ann_return >= 0 %}<span class="fill pos{% if g.is_long %} long{% endif %}" style="width: {{ '%.0f'|format(g.width) }}%"></span>{% endif %}</span>
+    </span>
     <span class="bar-value {{ g.tone }}">{{ pct(g.ann_return) }}</span>
   </div>
   {% endfor %}
 </div>
+{% endif %}
+{% if row and row.net %}
+<h2>换成三种交易成本之后，多空还剩多少</h2>
+<p class="hint">单边费率按成交金额计，买和卖各付一次。月成本 = 单边换手 × 2 × 单边费率。下表是扣完成本后的几何年化。未计冲击成本和借券费。毛多空 {{ pct(row.ls_ann) }}，月均单边换手 {{ pct(row.turnover) }}。</p>
+<table>
+  <thead>
+    <tr><th class="left">单边成本</th><th>扣费后多空年化</th></tr>
+  </thead>
+  <tbody>
+    {% for item in row.net %}
+    <tr>
+      <td class="left">{{ item.bps }} bp</td>
+      <td class="{{ 'pos' if item.ann_return >= 0 else 'neg' }}">{{ pct(item.ann_return) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
 {% endif %}
 <div class="cards">
   <div class="card"><span>检验对象</span><strong>{{ spec.label }}</strong><span>{{ spec.family }}</span></div>
@@ -30,7 +51,7 @@
   <p>{{ spec.definition }}</p>
   <p>算法：{{ spec.formula }}</p>
   {% if row %}
-  <p>策略 Rank IC {{ num(row.ic, 3) }}，t {{ num(row.t, 2) }}。五分组里，假设要买的那一组减掉另一端，年化 {{ pct(row.ls_ann) }}，最大回撤 {{ pct(row.ls_mdd) }}。</p>
+  <p>策略 Rank IC {{ num(row.ic, 3) }}。普通 t {{ num(row.t, 2) }}，Newey–West t {{ num(row.nw_t, 2) }}。页面上的“通过”用的是 Newey–West t。五分组毛多空几何年化 {{ pct(row.ls_ann) }}，最大回撤 {{ pct(row.ls_mdd) }}，月均单边换手 {{ pct(row.turnover) }}。均为样本内，未做样本外，未做多重检验校正。</p>
   {% endif %}
   {% if ortho %}
   <p>市值和行业已经从因子里去掉。去掉之后，残差和市值的相关、以及各行业残差均值，最大绝对值都是 {{ num(ortho.size_corr, 2) }} 这一量级，说明没有把市值或行业误当成因子。</p>

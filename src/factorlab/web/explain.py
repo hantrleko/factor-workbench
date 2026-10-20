@@ -1,24 +1,36 @@
-"""把分组收益翻成一句人话，并标出该买的那一组赚了多少。"""
+"""把分组收益翻成一句人话，并按统一口径给出样本内结论和扣费敏感性。"""
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import polars as pl
 
 from factorlab.eval.backtest import quantile_backtest
+from factorlab.eval.metrics import performance_stats
 from factorlab.report.formatters import pct
 from factorlab.schema import FACTORS
 
 _BY_NAME = {spec.name: spec for spec in FACTORS}
+
+# 单边费率：佣金加价差，按成交金额计一次。买和卖各付一次。
+COST_PER_SIDE = (0.0005, 0.0010, 0.0020)
+DEMO_NOTICE = "生成过程包含预设因子溢价，不代表真实投资表现。"
+SUPPORT_RULE = (
+    "“样本内通过”指 Newey–West t ≥ 1.96，且扣费前的多空收益为正。"
+    "这是全样本内的结果，没有做样本外检验，也没有做多重检验校正。"
+)
 
 
 def attach_group_reads(out: Path, rows: list[dict]) -> None:
     path = out / "factor_panel.parquet"
     if not path.is_file():
         for row in rows:
-            row.setdefault("because", "")
-            row.setdefault("groups", [])
+            row["because"] = ""
+            row["groups"] = []
+            row["net"] = []
+            row["net_10"] = None
         return
     panel = pl.read_parquet(path)
     for row in rows:
@@ -26,6 +38,8 @@ def attach_group_reads(out: Path, rows: list[dict]) -> None:
         if spec is None or spec.neu_name not in panel.columns:
             row["because"] = ""
             row["groups"] = []
+            row["net"] = []
+            row["net_10"] = None
             continue
         result = quantile_backtest(
             panel,
@@ -48,6 +62,8 @@ def attach_group_reads(out: Path, rows: list[dict]) -> None:
         row["groups"] = groups
         row["long_group"] = result.long_group
         row["because"] = _because(result.long_group, groups)
+        row["net"] = _net_cases(result)
+        row["net_10"] = next((item["ann_return"] for item in row["net"] if item["bps"] == 10), None)
 
 
 def _scale_bars(groups: list[dict]) -> None:
@@ -95,15 +111,63 @@ def industry_tilt(groups: list[dict]) -> str:
         return ""
     over_names = "、".join(item["group"] for item in over)
     under_names = "、".join(item["group"] for item in under)
-    return f"比市值基准多拿的是{over_names}，少拿的是{under_names}。"
+    return f"按期间平均权重，比市值基准多拿的是{over_names}，少拿的是{under_names}。"
+
+
+def month_net_returns(gross_returns, turnovers, cost_per_side: float) -> list[float]:
+    """月净收益 = 毛收益 − 单边换手 × 2 × 单边费率。首月没有换手，成本记 0。"""
+
+    nets = []
+    for gross, turn in zip(gross_returns, turnovers, strict=True):
+        traded = 0.0 if turn is None or not math.isfinite(float(turn)) else float(turn)
+        nets.append(float(gross) - 2.0 * traded * cost_per_side)
+    return nets
+
+
+def _net_cases(result) -> list[dict]:
+    frame = result.long_short
+    if frame.height == 0:
+        return []
+    gross = frame["ret"].to_list()
+    turns = frame["turnover"].to_list()
+    cases = []
+    for cost in COST_PER_SIDE:
+        nets = month_net_returns(gross, turns, cost)
+        cases.append(
+            {
+                "bps": int(round(cost * 10000)),
+                "ann_return": float(performance_stats(nets)["ann_return"]),
+            }
+        )
+    return cases
+
+
+def verdict(row: dict) -> tuple[str, str]:
+    """与详情页同一条规则：Newey–West t，外加扣费前多空收益的符号。"""
+
+    try:
+        ic = float(row["ic"])
+        t_stat = round(float(row["nw_t"]), 2)
+        long_short = float(row["ls_ann"])
+    except (KeyError, TypeError, ValueError):
+        return "样本不足", "muted"
+    if not math.isfinite(t_stat):
+        return "样本不足", "muted"
+    if ic > 0 and t_stat >= 1.96 and long_short > 0:
+        return "样本内通过", "pos"
+    if ic > 0 and long_short > 0:
+        return "毛收益为正，NW t 不足", "muted"
+    if ic > 0 and long_short <= 0:
+        return "排序略对，多空没赚到", "neg"
+    return "样本内不支持", "neg"
 
 
 def scoreboard(rows: list[dict]) -> list[dict]:
     order = (
-        ("支持该假设", "pos"),
-        ("多空为正，但不够稳", "muted"),
+        ("样本内通过", "pos"),
+        ("毛收益为正，NW t 不足", "muted"),
         ("排序略对，多空没赚到", "neg"),
-        ("不支持该假设", "neg"),
+        ("样本内不支持", "neg"),
         ("样本不足", "muted"),
     )
     counts: dict[str, int] = {}

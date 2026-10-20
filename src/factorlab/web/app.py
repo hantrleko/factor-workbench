@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 from pathlib import Path
 
-from flask import Flask, abort, render_template, send_from_directory
+from flask import Flask, Response, abort, render_template, send_from_directory
 
 from factorlab.report.formatters import num, pct
 from factorlab.schema import FACTORS
-from factorlab.web.explain import attach_group_reads, industry_tilt, scoreboard
+from factorlab.web.explain import (
+    DEMO_NOTICE,
+    SUPPORT_RULE,
+    attach_group_reads,
+    industry_tilt,
+    scoreboard,
+    verdict,
+)
 
 _BY_LABEL = {spec.label: spec for spec in FACTORS}
 _BY_NAME = {spec.name: spec for spec in FACTORS}
@@ -24,6 +33,10 @@ def create_app(out_dir: str | Path) -> Flask:
     )
     out = Path(out_dir).resolve()
     app.config["OUT"] = out
+
+    @app.context_processor
+    def inject_notices():
+        return {"demo_notice": DEMO_NOTICE, "support_rule": SUPPORT_RULE}
 
     @app.route("/")
     def home():
@@ -100,6 +113,45 @@ def create_app(out_dir: str | Path) -> Flask:
     def report_pdf():
         return _send_file(out, "factor_report.pdf")
 
+    @app.route("/download/factors.csv")
+    def factors_csv():
+        payload = _load(out)
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(
+            [
+                "因子",
+                "检验问题",
+                "结论",
+                "策略IC",
+                "普通t",
+                "Newey-West t",
+                "毛多空几何年化",
+                "扣10bp后几何年化",
+                "月均单边换手",
+            ]
+        )
+        for row in payload["summary"]:
+            writer.writerow(
+                [
+                    row.get("label", ""),
+                    row.get("question", ""),
+                    row.get("verdict", ""),
+                    row.get("ic", ""),
+                    row.get("t", ""),
+                    row.get("nw_t", ""),
+                    row.get("ls_ann", ""),
+                    row.get("net_10", ""),
+                    row.get("turnover", ""),
+                ]
+            )
+        body = "\ufeff" + buffer.getvalue()
+        return Response(
+            body,
+            mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=factors.csv"},
+        )
+
     return app
 
 
@@ -142,11 +194,13 @@ def _load(out: Path) -> dict:
         spec = _BY_LABEL.get(row.get("label", ""))
         row["name"] = spec.name if spec else ""
         row["question"] = spec.question if spec else row.get("label", "")
-        label, tone = _verdict(row)
+        label, tone = verdict(row)
         row["verdict"] = label
         row["verdict_tone"] = tone
         row.setdefault("because", "")
         row.setdefault("groups", [])
+        row.setdefault("net", [])
+        row.setdefault("net_10", None)
     attach_group_reads(out, data["summary"])
     data["scoreboard"] = scoreboard(data["summary"])
     data["brinson_read"] = _brinson_read(data.get("brinson") or {})
@@ -154,24 +208,6 @@ def _load(out: Path) -> dict:
     _CACHE.clear()
     _CACHE[cache_key] = data
     return data
-
-
-def _verdict(row: dict) -> tuple[str, str]:
-    """把 IC、t 和多空收益收成一句能直接读的结论。"""
-
-    try:
-        ic = float(row["ic"])
-        t_stat = round(float(row["t"]), 2)
-        long_short = float(row["ls_ann"])
-    except (KeyError, TypeError, ValueError):
-        return "样本不足", "muted"
-    if ic > 0 and t_stat >= 1.96 and long_short > 0:
-        return "支持该假设", "pos"
-    if ic > 0 and long_short > 0:
-        return "多空为正，但不够稳", "muted"
-    if ic > 0 and long_short <= 0:
-        return "排序略对，多空没赚到", "neg"
-    return "不支持该假设", "neg"
 
 
 def _brinson_read(brinson: dict) -> str:
@@ -184,7 +220,7 @@ def _brinson_read(brinson: dict) -> str:
     pieces = {"行业配置": allocation, "选股": selection, "交互": interaction}
     main = max(pieces, key=lambda name: abs(pieces[name]))
     detail = "，".join(f"{name} {pct(value)}" for name, value in pieces.items())
-    return f"{detail}。超额主要来自{main}。"
+    return f"累计贡献：{detail}。超额主要来自{main}。这些数字未年化，也未扣费。"
 
 
 def _chart(out: Path, filename: str) -> str | None:

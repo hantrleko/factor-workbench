@@ -12,23 +12,27 @@
     {% endfor %}
   </p>
   <div class="note">
-    本页不检验某一个总策略。每一行是一次独立检验：这个因子在月末已经能算出来的值，去掉市值和行业之后，能不能预测<strong>下个月的个股收益</strong>。
-    样本是 {{ payload.universe.n_stocks }} 只合成股票，{{ payload.universe.start }} 至 {{ payload.universe.end }}，共 {{ payload.universe.n_dates }} 个月末。数字用来核对计算，不是市场结论。
+    每一行是一次独立检验：月末已经能算出来的因子值，去掉市值和行业之后，能不能预测<strong>下个月的个股收益</strong>。
+    样本是 {{ payload.universe.n_stocks }} 只合成股票，{{ payload.universe.start }} 至 {{ payload.universe.end }}，共 {{ payload.universe.n_dates }} 个月末。
+    {{ support_rule }}
   </div>
   <div class="cards">
     <div class="card"><span>这一页在做</span><strong>单因子检验</strong><span>一行一个因子</span></div>
     <div class="card"><span>预测的东西</span><strong>下月收益</strong><span>不是当天，也不是当年</span></div>
     <div class="card"><span>先去掉</span><strong>市值和行业</strong><span>避免只是小盘或行业贝塔</span></div>
-    <div class="card"><span>怎样算支持</span><strong>IC 的 t ≥ 1.96</strong><span>并且多空收益为正</span></div>
+    <div class="card"><span>怎样算通过</span><strong>NW t ≥ 1.96</strong><span>并且扣费前多空为正</span></div>
   </div>
+  <p class="hint">毛多空是几何年化，未扣费。扣 10bp 后按单边 10bp、买卖各付一次计算，月成本 = 单边换手 × 2 × 10bp。未计冲击成本和借券费。换手是月均单边换手。</p>
+  <div class="table-wrap">
   <table>
     <thead>
       <tr>
         <th class="left">检验问题</th>
         <th class="left">结论</th>
-        <th>策略 IC</th>
-        <th>t</th>
-        <th>多空年化</th>
+        <th title="Newey–West t，滞后 1 期">NW t</th>
+        <th title="几何年化，未扣费">毛多空</th>
+        <th title="单边 10bp，买卖各一次">扣 10bp 后</th>
+        <th title="0.5 × Σ|Δw|，月均">月换手</th>
       </tr>
     </thead>
     <tbody>
@@ -36,19 +40,22 @@
       <tr class="clickable" onclick="location.href='/factor/{{ row.name }}'">
         <td class="left"><a href="/factor/{{ row.name }}">{{ row.question }}</a><div class="sub">{{ row.label }}。{{ row.because }}</div></td>
         <td class="left"><span class="pill {{ row.verdict_tone }}">{{ row.verdict }}</span></td>
-        <td>{{ num(row.ic, 3) }}</td>
-        <td>{{ num(row.t, 2) }}</td>
+        <td>{{ num(row.nw_t, 2) }}</td>
         <td class="{{ 'pos' if row.ls_ann >= 0 else 'neg' }}">{{ pct(row.ls_ann) }}</td>
+        <td class="{{ 'pos' if row.net_10 is not none and row.net_10 >= 0 else 'neg' }}">{{ pct(row.net_10) }}</td>
+        <td>{{ pct(row.turnover) }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
   <h2>另外两页问的是另一个组合</h2>
   <div class="cards">
     <a class="card linkcard" href="/brinson"><span>归因页</span><strong>超额从哪来</strong><span>八个因子合成的前 20% 组合，对市值基准</span></a>
-    <a class="card linkcard" href="/barra"><span>风险页</span><strong>押了什么暴露</strong><span>还是这一个组合，不是某一行因子</span></a>
+    <a class="card linkcard" href="/barra"><span>风险页</span><strong>承担了哪些暴露</strong><span>只描述暴露，不把暴露说成超额的原因</span></a>
   </div>
   <div class="actions">
+    <a href="/download/factors.csv">下载这张表</a>
     <a href="/download/report.html">完整 HTML 报告</a>
     <a href="/download/report.pdf">PDF</a>
   </div>

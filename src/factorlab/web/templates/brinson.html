@@ -14,11 +14,11 @@
     <div class="card"><span>拆开的问题</span><strong>配置还是选股</strong><span>行业之间，还是行业内部</span></div>
   </div>
   <div class="cards">
-    <div class="card"><span>组合</span><strong>{{ pct(payload.brinson.portfolio_return) }}</strong></div>
-    <div class="card"><span>基准</span><strong>{{ pct(payload.brinson.benchmark_return) }}</strong></div>
-    <div class="card"><span>主动</span><strong>{{ pct(payload.brinson.active_return) }}</strong></div>
-    <div class="card"><span>期数</span><strong>{{ num(payload.brinson.n_periods, 0) }}</strong></div>
+    <div class="card"><span>组合累计收益</span><strong>{{ pct(payload.brinson.portfolio_return) }}</strong><span>{{ payload.universe.start }} 至 {{ payload.universe.end }} · {{ num(payload.brinson.n_periods, 0) }} 个持有月 · 未年化 · 未扣费</span></div>
+    <div class="card"><span>基准累计收益</span><strong>{{ pct(payload.brinson.benchmark_return) }}</strong><span>同一窗口的市值加权基准 · 未年化 · 未扣费</span></div>
+    <div class="card"><span>累计主动收益</span><strong>{{ pct(payload.brinson.active_return) }}</strong><span>组合累计减基准累计 · 未年化 · 未扣费</span></div>
   </div>
+  <p class="hint">下面行业表里的权重是各持有月的简单平均。配置、选股、交互是 Carino 链接后的累计贡献，加总等于上面的累计主动收益。都未扣费。最后一期若没有下月收益，不计入这 {{ num(payload.brinson.n_periods, 0) }} 个月。</p>
   <div class="grid">
     {% if waterfall %}<img class="chart" src="{{ waterfall }}" alt="归因瀑布" />{% endif %}
     {% if timeline %}<img class="chart" src="{{ timeline }}" alt="分月效应" />{% endif %}
@@ -26,8 +26,13 @@
   <table>
     <thead>
       <tr>
-        <th class="left">行业</th><th>组合权重</th><th>基准权重</th>
-        <th>配置</th><th>选股</th><th>交互</th><th>合计</th>
+        <th class="left">行业</th>
+        <th title="各持有月权重的简单平均">组合权重（期间平均）</th>
+        <th title="各持有月权重的简单平均">基准权重（期间平均）</th>
+        <th title="Carino 链接后的累计贡献，未扣费">配置（累计）</th>
+        <th title="Carino 链接后的累计贡献，未扣费">选股（累计）</th>
+        <th title="Carino 链接后的累计贡献，未扣费">交互（累计）</th>
+        <th>合计（累计）</th>
       </tr>
     </thead>
     <tbody>

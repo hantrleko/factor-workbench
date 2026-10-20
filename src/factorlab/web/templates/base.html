@@ -9,14 +9,17 @@
 <body>
   <header class="top">
     <div class="top-inner">
-      <div class="brand">因子工作台<small>先看单个因子能不能预测下月收益</small></div>
+      <div class="brand">因子工作台<small>合成数据上的计算流程演示</small></div>
       <nav>
         <a href="/" class="{{ 'active' if page == 'home' else '' }}">8 个因子</a>
         <a href="/brinson" class="{{ 'active' if page == 'brinson' else '' }}">组合超额从哪来</a>
-        <a href="/barra" class="{{ 'active' if page == 'barra' else '' }}">组合押了什么</a>
+        <a href="/barra" class="{{ 'active' if page == 'barra' else '' }}">组合承担什么暴露</a>
       </nav>
     </div>
   </header>
+  <div class="demo-banner" role="note">
+    <strong>合成数据演示。</strong>{{ demo_notice }}这里展示计算流程，不是从真实市场发现的规律。
+  </div>
   <main class="wrap">
     {% block body %}{% endblock %}
   </main>

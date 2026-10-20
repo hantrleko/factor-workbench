@@ -2,22 +2,29 @@
 {% block title %}风险 · 因子工作台{% endblock %}
 {% block body %}
 <p class="kicker">这一页看的是归因页那个组合，不是某一个因子</p>
-<h1>超额是不是因为押了市值或某个行业？</h1>
+<h1>组合相对基准承担了哪些暴露？</h1>
 {% if not payload.ready %}
   <div class="note">还没有分析结果。</div>
 {% else %}
-  <div class="note">横条是归因页那个组合相对市值基准的暴露。条在零线右边，表示比基准更偏这一项。平均截面 R² {{ num(payload.barra.r2, 3) }}，表示这些暴露能解释多少下月收益。{% if payload.industry_tilt %} {{ payload.industry_tilt }}{% endif %}</div>
-  <div class="cards">
-    <div class="card"><span>主动波动</span><strong>{{ pct(payload.barra.total_vol) }}</strong></div>
-    <div class="card"><span>因子部分</span><strong>{{ pct(payload.barra.factor_vol) }}</strong></div>
-    <div class="card"><span>特质部分</span><strong>{{ pct(payload.barra.specific_vol) }}</strong></div>
-    <div class="card"><span>平均 R²</span><strong>{{ num(payload.barra.r2, 3) }}</strong></div>
+  <div class="note">
+    下图只说明组合相对市值基准多承担或少承担了什么，不能单独证明超额收益是由这些暴露造成的。
+    超额来自配置还是选股，以归因页的累计分解为准。
+    平均截面 R² {{ num(payload.barra.r2, 3) }} 是各月回归的样本内拟合程度，不是样本外预测能力。
   </div>
-  {% if exposure %}<img class="chart" src="{{ exposure }}" alt="主动暴露" />{% endif %}
-  <h2>因子收益</h2>
+  <div class="cards">
+    <div class="card"><span>主动波动（年化）</span><strong>{{ pct(payload.barra.total_vol) }}</strong><span>样本内月收益波动 × √12</span></div>
+    <div class="card"><span>因子部分（年化）</span><strong>{{ pct(payload.barra.factor_vol) }}</strong><span>来自暴露和因子协方差</span></div>
+    <div class="card"><span>特质部分（年化）</span><strong>{{ pct(payload.barra.specific_vol) }}</strong><span>残差波动，向中位数收缩</span></div>
+    <div class="card"><span>平均截面 R²</span><strong>{{ num(payload.barra.r2, 3) }}</strong><span>样本内拟合，不是样本外预测</span></div>
+  </div>
+  <p class="hint">横条是最后一期的主动暴露，不是全样本平均。条在零线右边表示当期比基准更偏这一项。行业权重的期间平均在归因页，两张图的时间口径不同。</p>
+  {% if exposure %}<img class="chart" src="{{ exposure }}" alt="最后一期主动暴露" />{% endif %}
+  <h2>因子收益（样本内）</h2>
+  <p class="hint">年化收益 = 月均因子收益 × 12，年化波动 = 月标准差 × √12。t 是普通均值 t。这些是样本内估计，不是组合超额的归因。</p>
+  <div class="table-wrap">
   <table>
     <thead>
-      <tr><th class="left">因子</th><th>年化收益</th><th>年化波动</th><th>t</th></tr>
+      <tr><th class="left">因子</th><th>年化收益</th><th>年化波动</th><th>普通 t</th></tr>
     </thead>
     <tbody>
       {% for row in payload.barra.factors %}
@@ -30,5 +37,6 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 {% endif %}
 {% endblock %}

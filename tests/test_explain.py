@@ -36,16 +36,33 @@ def test_industry_tilt_names_both_sides():
             {"group": "食品饮料", "wp": 0.11, "wb": 0.15},
         ]
     )
-    assert text.startswith("比市值基准多拿的是医药")
+    assert text.startswith("按期间平均权重，比市值基准多拿的是医药")
     assert "银行" in text and "食品饮料" in text
 
 
 def test_scoreboard_keeps_a_stable_order():
     rows = [
-        {"verdict": "支持该假设"},
+        {"verdict": "样本内通过"},
         {"verdict": "排序略对，多空没赚到"},
-        {"verdict": "支持该假设"},
+        {"verdict": "样本内通过"},
     ]
     labels = [item["label"] for item in scoreboard(rows)]
-    assert labels == ["支持该假设", "排序略对，多空没赚到"]
+    assert labels == ["样本内通过", "排序略对，多空没赚到"]
     assert scoreboard(rows)[0]["n"] == 2
+
+
+def test_verdict_uses_newey_west_not_the_ordinary_t():
+    from factorlab.web.explain import verdict
+
+    passed = verdict({"ic": 0.05, "t": 3.0, "nw_t": 2.2, "ls_ann": 0.04})
+    assert passed[0] == "样本内通过"
+    weak = verdict({"ic": 0.05, "t": 3.0, "nw_t": 1.2, "ls_ann": 0.04})
+    assert weak[0] == "毛收益为正，NW t 不足"
+
+
+def test_cost_charges_both_sides_of_one_way_turnover():
+    from factorlab.web.explain import month_net_returns
+
+    nets = month_net_returns([0.01, 0.02], [None, 1.0], 0.001)
+    assert nets[0] == 0.01
+    assert abs(nets[1] - (0.02 - 0.002)) < 1e-12
