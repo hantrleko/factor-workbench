@@ -1,7 +1,7 @@
 {
   "run_id": "88d6ca1d6773",
   "generated_at": "2026-10-24T16:00:00",
-  "source_commit": "6217a9a-dirty",
+  "source_commit": "22c88d6",
   "package_version": "0.1.0",
   "config": {
     "mode": "cn_pit",
