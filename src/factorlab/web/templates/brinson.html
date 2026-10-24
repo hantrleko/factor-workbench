@@ -5,6 +5,8 @@
 <h1>这个组合的超额，来自配行业还是选股票？</h1>
 {% if not payload.ready %}
   <div class="note">还没有分析结果。</div>
+{% elif not payload.brinson or not payload.brinson.groups %}
+  <div class="note">这个结果里没有 Brinson 分解。真实研究池只有十几只股票，不够支撑八因子合成组合相对市值基准的行业归因。单因子的行业和规模暴露在各因子页。</div>
 {% else %}
   <p class="verdict-line">{{ payload.brinson_read }}</p>
   {% if payload.industry_tilt %}<p class="hint">{{ payload.industry_tilt }}</p>{% endif %}
@@ -18,7 +20,7 @@
     <div class="card"><span>基准累计收益</span><strong>{{ pct(payload.brinson.benchmark_return) }}</strong><span>同一窗口的市值加权基准 · 未年化 · 未扣费</span></div>
     <div class="card"><span>累计主动收益</span><strong>{{ pct(payload.brinson.active_return) }}</strong><span>组合累计减基准累计 · 未年化 · 未扣费</span></div>
   </div>
-  <p class="hint">下面行业表里的权重是各持有月的简单平均。配置、选股、交互是 Carino 链接后的累计贡献，加总等于上面的累计主动收益。都未扣费。最后一期若没有下月收益，不计入这 {{ num(payload.brinson.n_periods, 0) }} 个月。</p>
+  <p class="hint">下面行业表里的权重是各持有月的简单平均。配置、选股、交互是 Carino 链接后的累计贡献，加总等于上面的累计主动收益。都未扣费。最后一期若没有下月收益，不计入这 {{ num(payload.brinson.n_periods, 0) }} 个月。逐月效应和链接后的贡献在 <a href="/download/periods_brinson.csv">逐月 Brinson</a>，把链接后的三列分别加总，应回到上面的累计值。</p>
   <div class="grid">
     {% if waterfall %}<img class="chart" src="{{ waterfall }}" alt="归因瀑布" />{% endif %}
     {% if timeline %}<img class="chart" src="{{ timeline }}" alt="分月效应" />{% endif %}

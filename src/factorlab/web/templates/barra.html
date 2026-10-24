@@ -5,12 +5,18 @@
 <h1>组合相对基准承担了哪些暴露？</h1>
 {% if not payload.ready %}
   <div class="note">还没有分析结果。</div>
+{% elif not payload.barra or not payload.barra.factors %}
+  <div class="note">这个结果里没有风险模型回归。真实研究池只有十几只股票，装不下国家、行业和八个风格同时估计。每个因子页列出多空组合的行业权重和对数市值差，那些数字只描述暴露。</div>
 {% else %}
   <div class="note">
     下图只说明组合相对市值基准多承担或少承担了什么，不能单独证明超额收益是由这些暴露造成的。
     超额来自配置还是选股，以归因页的累计分解为准。
     平均截面 R² {{ num(payload.barra.r2, 3) }} 是各月回归的样本内拟合程度，不是样本外预测能力。
+    残差接近零只说明这个样本和这个模型下的拟合，不能单独证明持仓没有行业或市值暴露。
   </div>
+  {% if payload.barra_excluded %}
+  <p class="hint">风格计划纳入对数市值和全部 8 个中性化因子。{{ payload.barra_excluded | join('、') }} 没有可用的因子收益序列，所以表里不列。截面离散度不够时，这一项会在标准化时被排除。这是纳入口径，不是事后挑选。</p>
+  {% endif %}
   <div class="cards">
     <div class="card"><span>主动波动（年化）</span><strong>{{ pct(payload.barra.total_vol) }}</strong><span>样本内月收益波动 × √12</span></div>
     <div class="card"><span>因子部分（年化）</span><strong>{{ pct(payload.barra.factor_vol) }}</strong><span>来自暴露和因子协方差</span></div>

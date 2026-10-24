@@ -5,6 +5,10 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
-output/
+data/cache/
+tmp_probe.py
+tmp_probe.txt
+tmp_cols.py
+tmp_cols.txt
 dist/
 build/

@@ -17,9 +17,13 @@ _BY_NAME = {spec.name: spec for spec in FACTORS}
 # 单边费率：佣金加价差，按成交金额计一次。买和卖各付一次。
 COST_PER_SIDE = (0.0005, 0.0010, 0.0020)
 DEMO_NOTICE = "生成过程包含预设因子溢价，不代表真实投资表现。"
+CN_NOTICE = (
+    "行情来自证券宝，财务来自东方财富公告日。收益用前复权价格，已包含分红和拆股。"
+    "上市腿不是完整的历史指数成分，退市股票只在退市日前可交易。这是研究记录，不是可交易 Alpha。"
+)
 SUPPORT_RULE = (
-    "“样本内通过”指 Newey–West t ≥ 1.96，且扣费前的多空收益为正。"
-    "这是全样本内的结果，没有做样本外检验，也没有做多重检验校正。"
+    "“样本内候选，尚未验证”指开发样本上 Newey–West t ≥ 1.96，且扣费前多空为正。"
+    "这不是可交易 Alpha。样本外和完整成本没有同时成立时，状态是“研究中”。"
 )
 
 
@@ -154,7 +158,7 @@ def verdict(row: dict) -> tuple[str, str]:
     if not math.isfinite(t_stat):
         return "样本不足", "muted"
     if ic > 0 and t_stat >= 1.96 and long_short > 0:
-        return "样本内通过", "pos"
+        return "样本内候选，尚未验证", "muted"
     if ic > 0 and long_short > 0:
         return "毛收益为正，NW t 不足", "muted"
     if ic > 0 and long_short <= 0:
@@ -164,7 +168,9 @@ def verdict(row: dict) -> tuple[str, str]:
 
 def scoreboard(rows: list[dict]) -> list[dict]:
     order = (
-        ("样本内通过", "pos"),
+        ("样本外仍成立", "pos"),
+        ("样本内候选，尚未验证", "muted"),
+        ("研究中", "muted"),
         ("毛收益为正，NW t 不足", "muted"),
         ("排序略对，多空没赚到", "neg"),
         ("样本内不支持", "neg"),

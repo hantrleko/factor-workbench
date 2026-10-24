@@ -34,7 +34,14 @@ def prepare_fundamentals(fundamentals: pl.DataFrame) -> pl.DataFrame:
         "capex",
         "equity",
     ]
-    df = df.with_columns([pl.col(col).cast(pl.Float64) for col in numeric])
+    df = df.with_columns([pl.col(col).cast(pl.Float64).fill_nan(None) for col in numeric])
+    ytd_cols = [
+        col
+        for col in ("depreciation_ytd", "net_income_ytd", "revenue_ytd", "capex_ytd")
+        if col in df.columns
+    ]
+    if ytd_cols:
+        df = df.with_columns([pl.col(col).cast(pl.Float64).fill_nan(None) for col in ytd_cols])
     bad_q = df.filter((pl.col("fiscal_quarter") < 1) | (pl.col("fiscal_quarter") > 4))
     if bad_q.height:
         raise ValueError("fiscal_quarter 必须是 1 到 4")
@@ -81,6 +88,16 @@ def _attach_lags(funds: pl.DataFrame) -> pl.DataFrame:
         (pl.col("ni_l0") + pl.col("ni_l1") + pl.col("ni_l2") + pl.col("ni_l3")).alias("ni_ttm"),
         (pl.col("rev_l0") + pl.col("rev_l1") + pl.col("rev_l2") + pl.col("rev_l3")).alias("rev_ttm"),
     )
+    for ytd_col, ttm_col in (
+        ("depreciation_ytd", "dep_ttm"),
+        ("capex_ytd", "capex_ttm"),
+        ("net_income_ytd", "ni_ttm"),
+        ("revenue_ytd", "rev_ttm"),
+    ):
+        if ytd_col not in out.columns:
+            continue
+        ytd_ttm = flow_ttm_from_ytd(out, ytd_col)
+        out = out.with_columns(pl.coalesce([pl.col(ttm_col), ytd_ttm]).alias(ttm_col))
     avg_assets = (pl.col("total_assets") + pl.col("total_assets_lag4")) / 2.0
     avg_equity = (pl.col("equity") + pl.col("equity_lag4")) / 2.0
     numer = (
@@ -114,7 +131,57 @@ def _attach_lags(funds: pl.DataFrame) -> pl.DataFrame:
         .otherwise(None)
         .alias("dupont_roe")
     )
-    return out
+    factor_cols = [
+        "sloan_accrual",
+        "capex_intensity",
+        "dupont_pm",
+        "dupont_at",
+        "dupont_em",
+        "dupont_roe",
+    ]
+    return out.sort(["ticker", "available_date", "fq"]).with_columns(
+        [pl.col(col).forward_fill().over("ticker") for col in factor_cols]
+    )
+
+
+def flow_ttm_from_ytd(frame: pl.DataFrame, ytd_col: str) -> pl.Series:
+    """由年初至今流量还原过去十二个月。年报直接用累计数；其他季度用本期累计 + 上年年报 − 上年同期累计。"""
+
+    indexed = frame.with_row_index("_i").select(
+        "_i",
+        "ticker",
+        "fiscal_year",
+        "fiscal_quarter",
+        pl.col(ytd_col).alias("_ytd"),
+    )
+    annual = indexed.filter(pl.col("fiscal_quarter") == 4).select(
+        "ticker",
+        (pl.col("fiscal_year") + 1).alias("fiscal_year"),
+        pl.col("_ytd").alias("_prev_fy"),
+    )
+    prior = indexed.select(
+        "ticker",
+        (pl.col("fiscal_year") + 1).alias("fiscal_year"),
+        "fiscal_quarter",
+        pl.col("_ytd").alias("_prev_q"),
+    )
+    joined = (
+        indexed.join(annual, on=["ticker", "fiscal_year"], how="left")
+        .join(prior, on=["ticker", "fiscal_year", "fiscal_quarter"], how="left")
+        .sort("_i")
+    )
+    ttm = (
+        pl.when(pl.col("fiscal_quarter") == 4)
+        .then(pl.col("_ytd"))
+        .when(
+            pl.col("_ytd").is_not_null()
+            & pl.col("_prev_fy").is_not_null()
+            & pl.col("_prev_q").is_not_null()
+        )
+        .then(pl.col("_ytd") + pl.col("_prev_fy") - pl.col("_prev_q"))
+        .otherwise(None)
+    )
+    return joined.select(ttm.alias("_ttm"))["_ttm"]
 
 
 def fundamental_factors(spine: pl.DataFrame, fundamentals: pl.DataFrame) -> pl.DataFrame:

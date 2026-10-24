@@ -10,13 +10,16 @@ from factorlab.web.app import create_app
 
 def default_out() -> Path:
     override = os.environ.get("FACTORLAB_OUT")
+    root = Path(__file__).resolve().parents[3]
     if override:
         return Path(override)
-    root = Path(__file__).resolve().parents[3]
+    release = root / "data" / "releases" / "cn_pit_v1"
+    if (release / "study.json").is_file():
+        return release
     local = root / "output" / "demo"
     if (local / "summary.json").is_file():
         return local
-    return root / "demo"
+    return release
 
 
 app = create_app(default_out())

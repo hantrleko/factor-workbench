@@ -41,6 +41,7 @@ class QuantileBacktest:
     long_short: pl.DataFrame
     summary: dict[str, float]
     group_summary: pl.DataFrame
+    weights: pl.DataFrame
 
 
 def quantile_backtest(
@@ -70,6 +71,7 @@ def quantile_backtest(
     short_group = 1 if direction > 0 else n_groups
     nav_rows: list[dict] = []
     ls_rows: list[dict] = []
+    weight_rows: list[dict] = []
     prev_group: dict[int, dict[str, float]] = {}
     prev_ls: dict[str, float] | None = None
     wealth = {g: 1.0 for g in range(1, n_groups + 1)}
@@ -119,6 +121,14 @@ def quantile_backtest(
             ls_wealth *= 1.0 + r_ls
             turn_ls = one_way_turnover(prev_ls, ls_w) if prev_ls is not None else float("nan")
             prev_ls = ls_w
+            for name, held in long_w.items():
+                weight_rows.append(
+                    {date_col: date, id_col: name, "side": "long", "group": long_group, "weight": held}
+                )
+            for name, held in short_w.items():
+                weight_rows.append(
+                    {date_col: date, id_col: name, "side": "short", "group": short_group, "weight": held}
+                )
             ls_rows.append(
                 {
                     date_col: date,
@@ -132,6 +142,7 @@ def quantile_backtest(
 
     group_nav = _dated(nav_rows, date_col, _empty_group_nav(date_col))
     long_short = _dated(ls_rows, date_col, _empty_ls(date_col))
+    weights = _dated(weight_rows, date_col, _empty_weights(date_col, id_col))
     group_summary_rows = []
     for g in range(1, n_groups + 1):
         sub = group_nav.filter(pl.col("group") == g) if group_nav.height else group_nav
@@ -153,6 +164,7 @@ def quantile_backtest(
         long_short=long_short,
         summary=ls_stats,
         group_summary=pl.DataFrame(group_summary_rows),
+        weights=weights,
     )
 
 
@@ -192,6 +204,18 @@ def _empty_group_nav(date_col: str) -> pl.DataFrame:
             "nav": pl.Float64,
             "n": pl.Int64,
             "turnover": pl.Float64,
+        }
+    )
+
+
+def _empty_weights(date_col: str, id_col: str) -> pl.DataFrame:
+    return pl.DataFrame(
+        schema={
+            date_col: pl.Date,
+            id_col: pl.Utf8,
+            "side": pl.Utf8,
+            "group": pl.Int64,
+            "weight": pl.Float64,
         }
     )
 

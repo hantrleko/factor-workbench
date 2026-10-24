@@ -4,7 +4,7 @@ from datetime import date
 
 import polars as pl
 
-from factorlab.factors.quality import fundamental_factors
+from factorlab.factors.quality import flow_ttm_from_ytd, fundamental_factors
 
 
 def _statement(**kwargs):
@@ -92,3 +92,18 @@ def test_sloan_dupont_and_publication_lag():
     assert abs(late["dupont_at"] - 100 / 210) < 1e-12
     assert abs(late["dupont_em"] - 2.0) < 1e-12
     assert abs(late["dupont_roe"] - late["dupont_pm"] * late["dupont_at"] * late["dupont_em"]) < 1e-12
+
+
+def test_ytd_depreciation_ttm_does_not_need_every_quarter():
+    frame = pl.DataFrame(
+        {
+            "ticker": ["A", "A", "A"],
+            "fiscal_year": [2020, 2020, 2021],
+            "fiscal_quarter": [2, 4, 2],
+            "depreciation_ytd": [10.0, 30.0, 12.0],
+        }
+    )
+    ttm = flow_ttm_from_ytd(frame, "depreciation_ytd").to_list()
+    assert ttm[0] is None
+    assert ttm[1] == 30.0
+    assert ttm[2] == 32.0

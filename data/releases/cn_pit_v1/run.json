@@ -1,0 +1,71 @@
+{
+  "run_id": "88d6ca1d6773",
+  "generated_at": "2026-10-24T16:00:00",
+  "source_commit": "6217a9a-dirty",
+  "package_version": "0.1.0",
+  "config": {
+    "mode": "cn_pit",
+    "seed": null,
+    "embed_premium": null,
+    "start": "2019-01-31",
+    "end": "2024-07-31",
+    "n_stocks": 16,
+    "factors": [
+      [
+        "sloan_accrual",
+        -1
+      ],
+      [
+        "capex_intensity",
+        -1
+      ],
+      [
+        "dupont_pm",
+        1
+      ],
+      [
+        "dupont_at",
+        1
+      ],
+      [
+        "dupont_em",
+        -1
+      ],
+      [
+        "amihud",
+        1
+      ],
+      [
+        "ivol",
+        -1
+      ],
+      [
+        "reversal",
+        1
+      ]
+    ],
+    "n_groups": 5,
+    "ic_min_names": 12,
+    "book_min_names": 12,
+    "full_cost_bps": {
+      "commission": 3,
+      "half_spread": 5,
+      "impact": 10,
+      "borrow_monthly_bps": 30
+    },
+    "flat_side_bps": [
+      5,
+      10,
+      20
+    ]
+  },
+  "brinson": "absent",
+  "tolerance_abs": 1e-08,
+  "tolerance_note": "同一配置、同一代码版本重跑后，首页的策略 IC、Newey–West t、几何年化、换手，以及 Brinson 配置、选股、交互的累计值，绝对误差应小于 1e-8。逐月成本文件里的净收益按同一公式年化后，也应落在这个范围内。换一台机器时，把容差放宽到 1e-6。",
+  "files": [
+    "periods_ic.csv",
+    "periods_long_short.csv",
+    "periods_weights.csv",
+    "periods_brinson.csv"
+  ]
+}

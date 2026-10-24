@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 import polars as pl
+from threadpoolctl import threadpool_limits
 
 
 def wls_residual(y: np.ndarray, x: np.ndarray, w: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -51,7 +52,9 @@ def wls_residual(y: np.ndarray, x: np.ndarray, w: np.ndarray) -> tuple[np.ndarra
     sw = np.sqrt(w_arr)
     x_weighted = x_arr * sw[:, None]
     y_weighted = y_arr * sw
-    beta = np.linalg.lstsq(x_weighted, y_weighted, rcond=None)[0]
+    # 小截面、行业哑元接近共线时，多线程 BLAS 会让残差在两次运行之间漂移。
+    with threadpool_limits(limits=1, user_api="blas"):
+        beta = np.linalg.lstsq(x_weighted, y_weighted, rcond=None)[0]
     beta = np.ravel(beta)
     if beta.shape != (x_arr.shape[1],):
         raise RuntimeError(
@@ -89,6 +92,7 @@ def ols_neutralize_one(
     weight: str = "sqrt_cap",
     winsor: tuple[float, float] | None = (0.01, 0.99),
     min_extra: int = 5,
+    min_industry_count: int = 2,
 ) -> np.ndarray:
     """对单个截面做市值、行业中性化。无法估计的位置返回 NaN。"""
 
@@ -136,8 +140,18 @@ def ols_neutralize_one(
     if sd > 1e-12:
         blocks.append(((ss - mu) / sd).reshape(-1, 1))
     codes, inverse = np.unique(labels, return_inverse=True)
-    if codes.size >= 2:
-        dummies = np.eye(codes.size, dtype=float)[inverse][:, 1:]
+    counts = np.bincount(inverse)
+    multi = [code for code, count in zip(codes, counts, strict=True) if count >= min_industry_count]
+    if len(multi) >= 2:
+        dummy_codes = multi[1:]
+    elif len(multi) == 1 and int(counts.sum()) > int(counts[codes == multi[0]][0]):
+        dummy_codes = multi
+    else:
+        dummy_codes = []
+    if dummy_codes:
+        dummies = np.zeros((idx.size, len(dummy_codes)), dtype=float)
+        for column, code in enumerate(dummy_codes):
+            dummies[labels == code, column] = 1.0
         blocks.append(dummies)
     design = np.hstack(blocks)
     if design.shape[0] != idx.size:
@@ -162,6 +176,8 @@ def neutralize_factor_frame(
     weight: str = "sqrt_cap",
     out_col: str | None = None,
     winsor: tuple[float, float] | None = (0.01, 0.99),
+    min_extra: int = 5,
+    min_industry_count: int = 2,
 ) -> pl.DataFrame:
     """按日期对整张面板做中性化，新增一列残差因子。"""
 
@@ -183,6 +199,8 @@ def neutralize_factor_frame(
             industry[start:end],
             weight=weight,
             winsor=winsor,
+            min_extra=min_extra,
+            min_industry_count=min_industry_count,
         )
     return ordered.with_columns(pl.Series(target, resid))
 

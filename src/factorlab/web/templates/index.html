@@ -13,25 +13,37 @@
   </p>
   <div class="note">
     每一行是一次独立检验：月末已经能算出来的因子值，去掉市值和行业之后，能不能预测<strong>下个月的个股收益</strong>。
-    样本是 {{ payload.universe.n_stocks }} 只合成股票，{{ payload.universe.start }} 至 {{ payload.universe.end }}，共 {{ payload.universe.n_dates }} 个月末。
+    样本是 {{ payload.universe.n_stocks }} 只{{ '真实股票' if payload.mode == 'cn_pit' else '合成股票' }}，{{ payload.universe.start }} 至 {{ payload.universe.end }}，共 {{ payload.universe.n_dates }} 个月末。
     {{ support_rule }}
   </div>
+  {% if payload.run %}
+  <p class="hint">运行 {{ payload.run.run_id }}。生成于 {{ payload.run.generated_at }}。代码 {{ payload.run.source_commit }}（{{ payload.run.package_version }}）。{% if payload.run.config.seed is not none %}随机种子 {{ payload.run.config.seed }}。{% endif %}{{ payload.run.tolerance_note }}</p>
+  {% endif %}
   <div class="cards">
     <div class="card"><span>这一页在做</span><strong>单因子检验</strong><span>一行一个因子</span></div>
     <div class="card"><span>预测的东西</span><strong>下月收益</strong><span>不是当天，也不是当年</span></div>
     <div class="card"><span>先去掉</span><strong>市值和行业</strong><span>避免只是小盘或行业贝塔</span></div>
-    <div class="card"><span>怎样算通过</span><strong>NW t ≥ 1.96</strong><span>并且扣费前多空为正</span></div>
+    <div class="card"><span>样本内候选</span><strong>NW t ≥ 1.96</strong><span>且扣费前多空为正。这只是候选，尚未验证</span></div>
   </div>
+  {% if payload.mode == 'cn_pit' %}
+  <p class="hint">毛多空是几何年化，未扣费。完整成本后按单边佣金 3bp、半点差 5bp、冲击 10bp，买卖各付一次，空头另加每月 30bp 借券费。换手是月均单边换手。{{ payload.universe.note }}</p>
+  {% else %}
   <p class="hint">毛多空是几何年化，未扣费。扣 10bp 后按单边 10bp、买卖各付一次计算，月成本 = 单边换手 × 2 × 10bp。未计冲击成本和借券费。换手是月均单边换手。</p>
+  {% endif %}
   <div class="table-wrap">
   <table>
     <thead>
       <tr>
         <th class="left">检验问题</th>
         <th class="left">结论</th>
+        {% if payload.mode == 'cn_pit' %}
+        <th title="开发样本 Rank IC 的 Newey–West t。最后 12 个月保留样本不参与。">开发样本 t</th>
+        <th title="滚动测试月、完整成本后多空收益的 Newey–West t">样本外 t</th>
+        {% else %}
         <th title="Newey–West t，滞后 1 期">NW t</th>
+        {% endif %}
         <th title="几何年化，未扣费">毛多空</th>
-        <th title="单边 10bp，买卖各一次">扣 10bp 后</th>
+        <th title="真实研究池用完整成本；合成演示用单边 10bp">{{ '完整成本后' if payload.mode == 'cn_pit' else '扣 10bp 后' }}</th>
         <th title="0.5 × Σ|Δw|，月均">月换手</th>
       </tr>
     </thead>
@@ -40,24 +52,40 @@
       <tr class="clickable" onclick="location.href='/factor/{{ row.name }}'">
         <td class="left"><a href="/factor/{{ row.name }}">{{ row.question }}</a><div class="sub">{{ row.label }}。{{ row.because }}</div></td>
         <td class="left"><span class="pill {{ row.verdict_tone }}">{{ row.verdict }}</span></td>
+        {% if payload.mode == 'cn_pit' %}
+        <td>{{ num(row.dev_nw_t, 2) }}</td>
+        <td>{{ num(row.oos_nw_t, 2) }}</td>
+        {% else %}
         <td>{{ num(row.nw_t, 2) }}</td>
+        {% endif %}
         <td class="{{ 'pos' if row.ls_ann >= 0 else 'neg' }}">{{ pct(row.ls_ann) }}</td>
-        <td class="{{ 'pos' if row.net_10 is not none and row.net_10 >= 0 else 'neg' }}">{{ pct(row.net_10) }}</td>
+        <td class="{{ 'pos' if (row.net_full if payload.mode == 'cn_pit' else row.net_10) is not none and (row.net_full if payload.mode == 'cn_pit' else row.net_10) >= 0 else 'neg' }}">{{ pct(row.net_full if payload.mode == 'cn_pit' else row.net_10) }}</td>
         <td>{{ pct(row.turnover) }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   </div>
+  {% if payload.mode == 'cn_pit' %}
+  <h2>这个股票池上的组合归因先不对外下结论</h2>
+  <p class="hint">十几只股票装不下八因子合成组合的 Brinson 分解，也装不下国家、行业和八个风格同时回归。行业和规模暴露写在每个因子页的多空两端。顶栏那两页在这个股票池上没有可报告的结果。</p>
+  {% else %}
   <h2>另外两页问的是另一个组合</h2>
   <div class="cards">
     <a class="card linkcard" href="/brinson"><span>归因页</span><strong>超额从哪来</strong><span>八个因子合成的前 20% 组合，对市值基准</span></a>
     <a class="card linkcard" href="/barra"><span>风险页</span><strong>承担了哪些暴露</strong><span>只描述暴露，不把暴露说成超额的原因</span></a>
   </div>
+  {% endif %}
   <div class="actions">
     <a href="/download/factors.csv">下载这张表</a>
-    <a href="/download/report.html">完整 HTML 报告</a>
-    <a href="/download/report.pdf">PDF</a>
+    <a href="/download/periods_ic.csv">逐月 IC</a>
+    <a href="/download/periods_long_short.csv">逐月多空与成本</a>
+    <a href="/download/periods_weights.csv">逐月持仓权重</a>
+    <a href="/download/periods_brinson.csv">逐月 Brinson</a>
+    <a href="/download/run.json">运行配置</a>
+    {% if payload.mode == 'cn_pit' %}<a href="/download/study.json">下载可复现的研究结果</a>{% endif %}
+    {% if payload.has_html %}<a href="/download/report.html">完整 HTML 报告</a>{% endif %}
+    {% if payload.has_pdf %}<a href="/download/report.pdf">PDF</a>{% endif %}
   </div>
 {% endif %}
 {% endblock %}

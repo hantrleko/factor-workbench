@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -175,4 +176,18 @@ def _write_tables(result: AnalysisResult, out_dir: Path) -> dict[str, str]:
     result.barra.factor_returns.write_parquet(paths["barra_returns"])
     result.portfolio.write_parquet(paths["portfolio"])
     result.benchmark.write_parquet(paths["benchmark"])
+    from factorlab.research.ledger import write_trace
+
+    mode = "synthetic" if result.meta.get("seed") is not None else "external"
+    record = write_trace(
+        out_dir,
+        result.panel,
+        brinson_periods=result.brinson_periods,
+        meta=result.meta,
+        generated_at=datetime.now().isoformat(timespec="seconds"),
+        mode=mode,
+        estimate_brinson=False,
+    )
+    result.meta["run_id"] = record["run_id"]
+    paths["run"] = out_dir / "run.json"
     return {key: str(path) for key, path in paths.items()}

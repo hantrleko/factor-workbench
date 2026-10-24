@@ -1,0 +1,152 @@
+{
+  "dataset_id": "cn_pit_v1",
+  "fetched_at": "2026-10-20T17:30:59",
+  "akshare_version": "1.18.11",
+  "price_source": "证券宝日行情。收益用前复权收盘价，计入分红和拆股；市值用未复权收盘价乘以成交量除以换手率",
+  "market_cap_source": "未复权收盘价 × 成交量 / 换手率，近似自由流通市值",
+  "fundamental_source": "东方财富按报告期资产负债表、利润表、现金流量表",
+  "announcement_rule": "available_date = NOTICE_DATE，且必须不早于 REPORT_DATE；公告日缺失则丢弃该期",
+  "universe_rule": "退市腿为上交所 2016 年前上市、2022–2024 年退市的 A 股，按退市日从新到旧取最多 8 只。上市腿为写死的 8 只 2016 年前已上市的非金融股，不是历史沪深300成分重建。股票只在上市日至退市日之间进入截面。",
+  "members": [
+    {
+      "code": "600213",
+      "name": "*ST亚星",
+      "listed": "1999-08-31",
+      "delist": "2024-10-17",
+      "leg": "delisted"
+    },
+    {
+      "code": "600297",
+      "name": "广汇汽车",
+      "listed": "2000-11-16",
+      "delist": "2024-08-28",
+      "leg": "delisted"
+    },
+    {
+      "code": "600112",
+      "name": "*ST天成",
+      "listed": "1997-11-27",
+      "delist": "2024-08-15",
+      "leg": "delisted"
+    },
+    {
+      "code": "600565",
+      "name": "ST迪马",
+      "listed": "2002-07-23",
+      "delist": "2024-08-07",
+      "leg": "delisted"
+    },
+    {
+      "code": "600277",
+      "name": "ST亿利",
+      "listed": "2000-07-25",
+      "delist": "2024-07-18",
+      "leg": "delisted"
+    },
+    {
+      "code": "600836",
+      "name": "*ST易连",
+      "listed": "1994-02-24",
+      "delist": "2024-07-11",
+      "leg": "delisted"
+    },
+    {
+      "code": "600220",
+      "name": "ST阳光",
+      "listed": "1999-09-27",
+      "delist": "2024-07-10",
+      "leg": "delisted"
+    },
+    {
+      "code": "600647",
+      "name": "退市同达",
+      "listed": "1993-05-04",
+      "delist": "2024-07-03",
+      "leg": "delisted"
+    },
+    {
+      "code": "600519",
+      "name": "贵州茅台",
+      "listed": "2016-01-01",
+      "delist": null,
+      "leg": "listed_snapshot"
+    },
+    {
+      "code": "600276",
+      "name": "恒瑞医药",
+      "listed": "2016-01-01",
+      "delist": null,
+      "leg": "listed_snapshot"
+    },
+    {
+      "code": "600887",
+      "name": "伊利股份",
+      "listed": "2016-01-01",
+      "delist": null,
+      "leg": "listed_snapshot"
+    },
+    {
+      "code": "600309",
+      "name": "万华化学",
+      "listed": "2016-01-01",
+      "delist": null,
+      "leg": "listed_snapshot"
+    },
+    {
+      "code": "600585",
+      "name": "海螺水泥",
+      "listed": "2016-01-01",
+      "delist": null,
+      "leg": "listed_snapshot"
+    },
+    {
+      "code": "600031",
+      "name": "三一重工",
+      "listed": "2016-01-01",
+      "delist": null,
+      "leg": "listed_snapshot"
+    },
+    {
+      "code": "600436",
+      "name": "片仔癀",
+      "listed": "2016-01-01",
+      "delist": null,
+      "leg": "listed_snapshot"
+    },
+    {
+      "code": "600690",
+      "name": "海尔智家",
+      "listed": "2016-01-01",
+      "delist": null,
+      "leg": "listed_snapshot"
+    }
+  ],
+  "industries_asof_fetch": {
+    "600213": "已退市",
+    "600297": "已退市",
+    "600112": "已退市",
+    "600565": "已退市",
+    "600277": "已退市",
+    "600836": "已退市",
+    "600220": "已退市",
+    "600647": "已退市",
+    "600519": "白酒",
+    "600276": "化学制药",
+    "600887": "食品",
+    "600309": "化学制品",
+    "600585": "水泥",
+    "600031": "工程机械",
+    "600436": "中药",
+    "600690": "白色家电"
+  },
+  "failures": [],
+  "limitations": [
+    "上市腿使用抓取日仍在交易的公司，这一腿有幸存者偏差",
+    "行业是抓取日的东财行业，不是历史时点行业",
+    "市值是换手率反推的流通市值，不是总市值",
+    "退市日使用上交所名单中的暂停上市日期字段",
+    "行情缓存为 2019-01-01 至 2024-12-31 的证券宝日线",
+    "现金流量表补充资料里的折旧在一季报和三季报经常缺失；缺失时不倒推，应计因子沿用最近一份已经公告且能够计算的报表"
+  ],
+  "fundamentals_built_at": "2026-10-20T18:00:49"
+}

@@ -42,12 +42,12 @@ def test_industry_tilt_names_both_sides():
 
 def test_scoreboard_keeps_a_stable_order():
     rows = [
-        {"verdict": "样本内通过"},
+        {"verdict": "样本内候选，尚未验证"},
         {"verdict": "排序略对，多空没赚到"},
-        {"verdict": "样本内通过"},
+        {"verdict": "样本内候选，尚未验证"},
     ]
     labels = [item["label"] for item in scoreboard(rows)]
-    assert labels == ["样本内通过", "排序略对，多空没赚到"]
+    assert labels == ["样本内候选，尚未验证", "排序略对，多空没赚到"]
     assert scoreboard(rows)[0]["n"] == 2
 
 
@@ -55,7 +55,7 @@ def test_verdict_uses_newey_west_not_the_ordinary_t():
     from factorlab.web.explain import verdict
 
     passed = verdict({"ic": 0.05, "t": 3.0, "nw_t": 2.2, "ls_ann": 0.04})
-    assert passed[0] == "样本内通过"
+    assert passed[0] == "样本内候选，尚未验证"
     weak = verdict({"ic": 0.05, "t": 3.0, "nw_t": 1.2, "ls_ann": 0.04})
     assert weak[0] == "毛收益为正，NW t 不足"
 
