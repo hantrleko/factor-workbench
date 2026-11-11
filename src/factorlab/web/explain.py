@@ -21,6 +21,10 @@ CN_NOTICE = (
     "行情来自证券宝，财务来自东方财富公告日。收益用前复权价格，已包含分红和拆股。"
     "上市腿不是完整的历史指数成分，退市股票只在退市日前可交易。这是研究记录，不是可交易 Alpha。"
 )
+CSI_NOTICE = (
+    "股票池是沪深300历史成分，按调入日和调出日进出截面。财务按公告日进入，收益用前复权价。"
+    "这是研究记录，不是可交易 Alpha。"
+)
 SUPPORT_RULE = (
     "“样本内候选，尚未验证”指开发样本上 Newey–West t ≥ 1.96，且扣费前多空为正。"
     "这不是可交易 Alpha。样本外和完整成本没有同时成立时，状态是“研究中”。"
@@ -116,6 +120,57 @@ def industry_tilt(groups: list[dict]) -> str:
     over_names = "、".join(item["group"] for item in over)
     under_names = "、".join(item["group"] for item in under)
     return f"按期间平均权重，比市值基准多拿的是{over_names}，少拿的是{under_names}。"
+
+
+def ic_return_conflict(ic_mean, ls_ann, gross_returns, groups) -> str:
+    """策略 IC 为正、多空年化为负时，写出分组和尾部月份。"""
+
+    try:
+        ic = float(ic_mean)
+        ls = float(ls_ann)
+    except (TypeError, ValueError):
+        return ""
+    if not math.isfinite(ic) or not math.isfinite(ls) or ic <= 0 or ls >= 0:
+        return ""
+    finite = []
+    for value in gross_returns or []:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(number):
+            finite.append(number)
+    parts = [
+        f"全样本策略 IC 是 {ic:.3f}，多空年化是 {pct(ls)}。",
+        "IC 衡量整条截面的排序，多空只交易两头，两头的收益可以和中间的排序分开走。",
+    ]
+    ordered = sorted(groups or [], key=lambda item: int(item.get("group") or 0))
+    bits = []
+    for item in ordered:
+        try:
+            ann = float(item.get("ann_return"))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(ann):
+            continue
+        label = f"第 {item.get('group')} 组"
+        if item.get("is_long"):
+            label += "（多头）"
+        elif item.get("is_short"):
+            label += "（空头）"
+        bits.append(f"{label} {pct(ann)}")
+    if bits:
+        parts.append("全样本五组年化：" + "，".join(bits) + "。")
+    if len(finite) >= 10:
+        k = max(1, len(finite) // 10)
+        worst = sorted(finite)[:k]
+        total = sum(finite)
+        rest = total - sum(worst)
+        parts.append(
+            f"全样本 {len(finite)} 个月的多空收益简单加总是 {pct(total)}。"
+            f"最差的 {k} 个月加总是 {pct(sum(worst))}，其余月份加总是 {pct(rest)}。"
+        )
+    return "".join(parts)
 
 
 def month_net_returns(gross_returns, turnovers, cost_per_side: float) -> list[float]:

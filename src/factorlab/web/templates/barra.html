@@ -17,9 +17,13 @@
   {% if payload.barra_excluded %}
   <p class="hint">风格计划纳入对数市值和全部 8 个中性化因子。{{ payload.barra_excluded | join('、') }} 没有可用的因子收益序列，所以表里不列。截面离散度不够时，这一项会在标准化时被排除。这是纳入口径，不是事后挑选。</p>
   {% endif %}
+  {% if payload.barra.risk_note %}<p class="hint">{{ payload.barra.risk_note }}</p>{% endif %}
+  {% if payload.barra.total_vol is none %}
+  <p class="hint">主动波动、因子部分、特质部分这三张卡片没有数字。上面这段说明了原因，不是数据还没加载。</p>
+  {% endif %}
   <div class="cards">
     <div class="card"><span>主动波动（年化）</span><strong>{{ pct(payload.barra.total_vol) }}</strong><span>样本内月收益波动 × √12</span></div>
-    <div class="card"><span>因子部分（年化）</span><strong>{{ pct(payload.barra.factor_vol) }}</strong><span>来自暴露和因子协方差</span></div>
+    <div class="card"><span>因子部分（年化）</span><strong>{{ pct(payload.barra.factor_vol) }}</strong><span>来自暴露和因子协方差。估不出完整协方差时只用自身方差</span></div>
     <div class="card"><span>特质部分（年化）</span><strong>{{ pct(payload.barra.specific_vol) }}</strong><span>残差波动，向中位数收缩</span></div>
     <div class="card"><span>平均截面 R²</span><strong>{{ num(payload.barra.r2, 3) }}</strong><span>样本内拟合，不是样本外预测</span></div>
   </div>

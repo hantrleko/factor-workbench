@@ -101,6 +101,99 @@ def book_weights(
     return portfolio, benchmark
 
 
+def neutral_book_weights(
+    panel: pl.DataFrame,
+    *,
+    date_col: str = "date",
+    id_col: str = "ticker",
+    score_col: str = "composite",
+    ret_col: str = "fwd_ret",
+    industry_col: str = "industry",
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """行业权重和大小市值桶都贴着基准。每个桶里只留复合得分最高的一只。"""
+
+    if industry_col not in panel.columns:
+        raise KeyError("中性组合需要行业列")
+    ordered = panel.sort([date_col, id_col])
+    dates = ordered[date_col].to_numpy()
+    ids = ordered[id_col].to_list()
+    score = ordered[score_col].to_numpy().astype(float)
+    ret = ordered[ret_col].to_numpy().astype(float)
+    cap = ordered["mktcap"].to_numpy().astype(float)
+    industries = [_industry_label(item) for item in ordered[industry_col].to_list()]
+    _, starts = np.unique(dates, return_index=True)
+    ends = np.r_[starts[1:], ordered.height]
+    port_rows: list[dict] = []
+    bench_rows: list[dict] = []
+    for start, end in zip(starts, ends, strict=True):
+        date = dates[start]
+        tradable = np.isfinite(ret[start:end]) & np.isfinite(cap[start:end]) & (cap[start:end] > 0)
+        if int(tradable.sum()) < 2:
+            continue
+        index = np.flatnonzero(tradable)
+        caps = cap[start:end][tradable]
+        names = [ids[start + i] for i in index]
+        scores = score[start:end][tradable]
+        labels = [industries[start + i] for i in index]
+        total = float(caps.sum())
+        bench_w = caps / total
+        for name, weight in zip(names, bench_w, strict=True):
+            bench_rows.append({date_col: _as_date(date), id_col: name, "weight": float(weight)})
+        held: dict[str, float] = {}
+        for label in dict.fromkeys(labels):
+            members = np.flatnonzero(np.array(labels) == label)
+            _assign_bucket(held, names, caps, scores, members, total)
+        for name, weight in held.items():
+            if weight > 0:
+                port_rows.append({date_col: _as_date(date), id_col: name, "weight": float(weight)})
+    return _frame(port_rows, date_col, id_col), _frame(bench_rows, date_col, id_col)
+
+
+def _industry_label(value: object) -> str:
+    if value is None:
+        return "未分类"
+    text = str(value).strip()
+    return text or "未分类"
+
+
+def _assign_bucket(
+    held: dict[str, float],
+    names: list[str],
+    caps: np.ndarray,
+    scores: np.ndarray,
+    members: np.ndarray,
+    total: float,
+) -> None:
+    member_caps = caps[members]
+    if members.size == 1 or float(np.nanmax(member_caps) - np.nanmin(member_caps)) <= 1e-12:
+        _place(held, names, caps, scores, members, float(member_caps.sum()) / total)
+        return
+    median = float(np.median(member_caps))
+    small = members[member_caps <= median]
+    large = members[member_caps > median]
+    for bucket in (small, large):
+        if bucket.size == 0:
+            continue
+        _place(held, names, caps, scores, bucket, float(caps[bucket].sum()) / total)
+
+
+def _place(
+    held: dict[str, float],
+    names: list[str],
+    caps: np.ndarray,
+    scores: np.ndarray,
+    bucket: np.ndarray,
+    share: float,
+) -> None:
+    finite = bucket[np.isfinite(scores[bucket])]
+    pick_from = finite if finite.size else bucket
+    if finite.size:
+        pick = int(pick_from[int(np.argmax(scores[pick_from]))])
+    else:
+        pick = int(pick_from[int(np.argmax(caps[pick_from]))])
+    held[names[pick]] = held.get(names[pick], 0.0) + share
+
+
 def _as_date(value: object) -> dt.date:
     if isinstance(value, dt.datetime):
         return value.date()

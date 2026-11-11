@@ -54,16 +54,44 @@ def quantile_backtest(
     date_col: str = "date",
     id_col: str = "ticker",
     min_names: int | None = None,
+    respect_tradable: bool = False,
 ) -> QuantileBacktest:
     if direction not in (1, -1):
         raise ValueError("direction 只能是 +1 或 -1")
     floor = n_groups * 3
     min_obs = min_names or max(20, floor)
+    if panel.height == 0 or factor not in panel.columns or ret_col not in panel.columns:
+        empty_nav = _empty_group_nav(date_col)
+        empty_ls = _empty_ls(date_col)
+        empty_w = _empty_weights(date_col, id_col)
+        summary = performance_stats(np.array([]))
+        summary["avg_turnover"] = float("nan")
+        summary["long_group"] = n_groups if direction > 0 else 1
+        summary["short_group"] = 1 if direction > 0 else n_groups
+        group_rows = []
+        for g in range(1, n_groups + 1):
+            row = performance_stats(np.array([]))
+            row["group"] = g
+            row["avg_turnover"] = float("nan")
+            group_rows.append(row)
+        return QuantileBacktest(
+            n_groups=n_groups,
+            long_group=summary["long_group"],
+            short_group=summary["short_group"],
+            group_nav=empty_nav,
+            long_short=empty_ls,
+            summary=summary,
+            group_summary=pl.DataFrame(group_rows),
+            weights=empty_w,
+        )
     ordered = panel.sort([date_col, id_col])
     dates = ordered[date_col].to_numpy()
     ids = ordered[id_col].to_list()
     values = ordered[factor].to_numpy()
     rets = ordered[ret_col].to_numpy()
+    tradable_values = None
+    if respect_tradable and "tradable" in ordered.columns:
+        tradable_values = ordered["tradable"].fill_null(False).cast(pl.Boolean).to_numpy()
     _, starts = np.unique(dates, return_index=True)
     ends = np.r_[starts[1:], ordered.height]
 
@@ -82,20 +110,27 @@ def quantile_backtest(
         val = values[start:end]
         ret = rets[start:end]
         names = ids[start:end]
-        usable = np.isfinite(val) & np.isfinite(ret)
-        if int(usable.sum()) < min_obs:
+        openable = np.isfinite(val) & np.isfinite(ret)
+        if tradable_values is not None:
+            openable = openable & tradable_values[start:end].astype(bool)
+        if int(openable.sum()) < min_obs:
             continue
-        groups = assign_quantile_groups(np.where(usable, val, np.nan), n_groups)
+        groups = assign_quantile_groups(np.where(openable, val, np.nan), n_groups)
         group_ret: dict[int, float] = {}
         group_w: dict[int, dict[str, float]] = {}
         for g in range(1, n_groups + 1):
             take = groups == g
             members = [names[i] for i in np.flatnonzero(take)]
-            if not members:
-                continue
-            group_ret[g] = float(np.mean(ret[take]))
-            weight = 1.0 / len(members)
-            group_w[g] = {name: weight for name in members}
+            if tradable_values is None:
+                if not members:
+                    continue
+                group_ret[g] = float(np.mean(ret[take]))
+                group_w[g] = {name: 1.0 / len(members) for name in members}
+            else:
+                carried = _carry_book(names, ret, openable, members, prev_group.get(g))
+                if carried is None:
+                    continue
+                group_w[g], group_ret[g] = carried
             wealth[g] *= 1.0 + group_ret[g]
             turn = (
                 one_way_turnover(prev_group[g], group_w[g]) if g in prev_group else float("nan")
@@ -106,7 +141,7 @@ def quantile_backtest(
                     "group": g,
                     "ret": group_ret[g],
                     "nav": wealth[g],
-                    "n": len(members),
+                    "n": len(group_w[g]),
                     "turnover": turn,
                 }
             )
@@ -166,6 +201,45 @@ def quantile_backtest(
         group_summary=pl.DataFrame(group_summary_rows),
         weights=weights,
     )
+
+
+def _carry_book(
+    names: list[str],
+    ret: np.ndarray,
+    openable: np.ndarray,
+    fresh: list[str],
+    prev: dict[str, float] | None,
+) -> tuple[dict[str, float], float] | None:
+    """新开仓只用可交易股票。上期已持有且本月不能卖出的股票，按原权重留在组里。"""
+
+    index = {name: i for i, name in enumerate(names)}
+    stuck: dict[str, float] = {}
+    for name, weight in (prev or {}).items():
+        idx = index.get(name)
+        if idx is None or bool(openable[idx]) or weight <= 0:
+            continue
+        stuck[name] = float(weight)
+    stuck_sum = sum(stuck.values())
+    weights: dict[str, float] = {}
+    if stuck_sum >= 1.0 - 1e-12:
+        weights = {name: weight / stuck_sum for name, weight in stuck.items()}
+    else:
+        weights.update(stuck)
+        newcomers = [name for name in fresh if name not in weights]
+        room = 1.0 - stuck_sum
+        if newcomers and room > 0:
+            share = room / len(newcomers)
+            for name in newcomers:
+                weights[name] = share
+        elif stuck and not newcomers:
+            weights = {name: weight / stuck_sum for name, weight in stuck.items()}
+    if not weights:
+        return None
+    total = 0.0
+    for name, weight in weights.items():
+        value = ret[index[name]]
+        total += weight * (float(value) if np.isfinite(value) else 0.0)
+    return weights, float(total)
 
 
 def _finite_mean(values: np.ndarray) -> float:

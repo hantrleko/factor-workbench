@@ -88,14 +88,26 @@ def market_return(prices: pl.DataFrame) -> pl.DataFrame:
 
 def monthly_returns(prices: pl.DataFrame, min_days: int = 10) -> pl.DataFrame:
     gross = prices.with_columns((1.0 + pl.col("ret")).alias("gross"))
-    out = gross.group_by(["ticker", "month"]).agg(
+    aggs = [
         pl.col("gross").product().alias("gross_m"),
         pl.len().alias("n_days"),
         pl.col("date").max().alias("date"),
         pl.col("mktcap").sort_by("date").last().alias("mktcap"),
         pl.col("industry").sort_by("date").last().alias("industry"),
+        pl.col("volume").sort_by("date").last().alias("last_volume"),
+        pl.col("ret").sort_by("date").last().alias("last_ret"),
+    ]
+    if "dollar_volume" in prices.columns:
+        aggs.append(pl.col("dollar_volume").sum().alias("dollar_volume"))
+    out = gross.group_by(["ticker", "month"]).agg(aggs)
+    out = out.with_columns(
+        (pl.col("gross_m") - 1.0).alias("month_ret"),
+        (
+            (pl.col("last_volume") > 0)
+            & pl.col("last_ret").is_not_null()
+            & (pl.col("last_ret").abs() < 0.095)
+        ).alias("tradable"),
     )
-    out = out.with_columns((pl.col("gross_m") - 1.0).alias("month_ret"))
     return out.filter(pl.col("n_days") >= min_days)
 
 
@@ -180,5 +192,7 @@ def microstructure_panel(prices: pl.DataFrame) -> pl.DataFrame:
             "amihud",
             "ivol",
             "reversal",
+            "tradable",
         ]
+        + (["dollar_volume"] if "dollar_volume" in monthly.columns else [])
     )

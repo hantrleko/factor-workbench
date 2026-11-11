@@ -13,9 +13,11 @@ def default_out() -> Path:
     root = Path(__file__).resolve().parents[3]
     if override:
         return Path(override)
+    for name in ("csi300_pit_v1", "cn_pit_v1"):
+        release = root / "data" / "releases" / name
+        if (release / "study.json").is_file():
+            return release
     release = root / "data" / "releases" / "cn_pit_v1"
-    if (release / "study.json").is_file():
-        return release
     local = root / "output" / "demo"
     if (local / "summary.json").is_file():
         return local

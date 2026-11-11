@@ -1,0 +1,3 @@
+source: https://raw.githubusercontent.com/unliftedq/index-constitution/main/history/csi300.csv
+fetched: 2026-10-24
+license: see unliftedq/index-constitution

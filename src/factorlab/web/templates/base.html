@@ -11,15 +11,36 @@
     <div class="top-inner">
       <div class="brand">因子工作台<small>{{ brand_note }}</small></div>
       <nav>
-        <a href="/" class="{{ 'active' if page == 'home' else '' }}">8 个因子</a>
-        <a href="/brinson" class="{{ 'active' if page == 'brinson' else '' }}">组合超额从哪来</a>
-        <a href="/barra" class="{{ 'active' if page == 'barra' else '' }}">组合承担什么暴露</a>
+        <a href="/{{ universe_q }}" class="{{ 'active' if page == 'home' else '' }}">8 个因子</a>
+        <a href="/compare{{ universe_q }}" class="{{ 'active' if page == 'compare' else '' }}">对照</a>
+        <a href="/brinson{{ universe_q }}" class="{{ 'active' if page == 'brinson' else '' }}">组合超额从哪来</a>
+        <a href="/barra{{ universe_q }}" class="{{ 'active' if page == 'barra' else '' }}">组合承担什么暴露</a>
+        <a href="/runs{{ universe_q }}" class="{{ 'active' if page == 'runs' else '' }}">运行记录</a>
       </nav>
+      <form class="switcher" method="get" action="{{ request.path }}">
+        {% for key in request.args %}
+          {% if key != 'universe' and key != 'factors' %}
+          <input type="hidden" name="{{ key }}" value="{{ request.args.get(key) }}">
+          {% endif %}
+        {% endfor %}
+        {% for value in request.args.getlist('factors') %}
+        <input type="hidden" name="factors" value="{{ value }}">
+        {% endfor %}
+        <label>样本
+          <select name="universe" onchange="this.form.submit()">
+            {% if not universe_id %}<option value="" selected>当前结果</option>{% endif %}
+            {% for item in universes %}
+            <option value="{{ item.id }}" {{ 'selected' if item.id == universe_id else '' }} {{ 'disabled' if not item.ready else '' }}>{{ item.label }}{% if not item.ready %}，未就绪{% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </form>
     </div>
   </header>
   <div class="demo-banner" role="note">
     <strong>{{ banner_title }}</strong>{{ demo_notice }}这里展示的是研究流程，不是已经验证的可交易 Alpha。
   </div>
+  {% if universe_note %}<div class="demo-banner" role="note">{{ universe_note }}</div>{% endif %}
   <main class="wrap">
     {% block body %}{% endblock %}
   </main>

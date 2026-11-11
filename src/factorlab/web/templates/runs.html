@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}运行记录 · 因子工作台{% endblock %}
+{% block body %}
+<p class="kicker">同一次配置得到同一个运行编号</p>
+<h1>运行记录</h1>
+<p class="hint">编号只由样本模式、区间、股票数、因子方向和成本假设决定，不由生成时间决定。下面列出各次发布目录里的 run.json。配置相同的归档不会再占一行。这一页不重跑，也不改结论。</p>
+{% if not runs %}
+<div class="note">还没有运行记录。</div>
+{% else %}
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th class="left">位置</th>
+      <th class="left">运行编号</th>
+      <th>生成时间</th>
+      <th>代码版本</th>
+      <th>模式</th>
+      <th>区间</th>
+      <th>股票数</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in runs %}
+    <tr>
+      <td class="left">{{ item.place }}</td>
+      <td class="left">{{ item.run_id }}</td>
+      <td>{{ item.generated_at }}</td>
+      <td>{{ item.source_commit }}</td>
+      <td>{{ item.mode }}</td>
+      <td>{{ item.start }} 至 {{ item.end }}</td>
+      <td>{{ item.n_stocks }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if runs|length >= 2 %}
+<h2>对比两次运行</h2>
+<form class="filters" method="get" action="/runs">
+  {% if universe_id %}<input type="hidden" name="universe" value="{{ universe_id }}">{% endif %}
+  <label>左侧
+    <select name="left">
+      {% for item in runs %}
+      <option value="{{ item.key }}" {{ 'selected' if item.key == left_id else '' }}>{{ item.place }} {{ item.run_id }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>右侧
+    <select name="right">
+      {% for item in runs %}
+      <option value="{{ item.key }}" {{ 'selected' if item.key == right_id else '' }}>{{ item.place }} {{ item.run_id }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">对比差异</button>
+</form>
+{% if left_id == right_id %}
+<p class="hint">选了同一次运行。</p>
+{% elif same %}
+<p class="hint">这两次运行的这些字段相同。</p>
+{% elif diff %}
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th class="left">字段</th><th>左侧</th><th>右侧</th></tr>
+  </thead>
+  <tbody>
+    {% for row in diff %}
+    <tr>
+      <td class="left">{{ row.field }}</td>
+      <td>{{ row.left }}</td>
+      <td>{{ row.right }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% else %}
+<p class="hint">目前只有一次运行，没有可对照的第二次。</p>
+{% endif %}
+{% endif %}
+{% endblock %}

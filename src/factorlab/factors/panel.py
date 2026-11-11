@@ -46,21 +46,24 @@ def build_factor_panel(
     _assert_unique(panel)
     _assert_forward_alignment(panel)
     factor_names = [spec.name for spec in FACTORS]
-    return panel.select(
-        [
-            "date",
-            "ticker",
-            "month",
-            "industry",
-            "mktcap",
-            "month_ret",
-            "fwd_ret",
-            *[f"fwd_ret_{h}" for h in range(1, horizons + 1)],
-            *factor_names,
-            "dupont_roe",
-            "available_date",
-        ]
-    )
+    columns = [
+        "date",
+        "ticker",
+        "month",
+        "industry",
+        "mktcap",
+        "month_ret",
+        "fwd_ret",
+        *[f"fwd_ret_{h}" for h in range(1, horizons + 1)],
+        *factor_names,
+        "dupont_roe",
+        "available_date",
+    ]
+    if "tradable" in panel.columns:
+        columns.append("tradable")
+    if "dollar_volume" in panel.columns:
+        columns.append("dollar_volume")
+    return panel.select(columns)
 
 
 def _assert_unique(panel: pl.DataFrame) -> None:

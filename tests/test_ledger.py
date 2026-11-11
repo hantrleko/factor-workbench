@@ -98,7 +98,9 @@ def test_same_config_keeps_the_run_id_and_rebuilds_within_tolerance(tmp_path: Pa
     assert "逐月多空与成本" in home
     page = client.get("/factor/sloan_accrual?bps=10").get_data(as_text=True)
     assert "10 bp" in page
-    assert "运行" not in page or record["run_id"] in page
+    assert "结论" in page
+    browsing = page.replace("运行记录", "")
+    assert "运行" not in browsing or record["run_id"] in page
     bad = client.get("/factor/sloan_accrual?bps=abc").get_data(as_text=True)
     assert "0 到 200" in bad
     bad_date = client.get("/factor/sloan_accrual?start=2022/1/1").get_data(as_text=True)

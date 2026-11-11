@@ -6,12 +6,16 @@
 {% if not payload.ready %}
   <div class="note">还没有分析结果。</div>
 {% elif not payload.brinson or not payload.brinson.groups %}
-  <div class="note">这个结果里没有 Brinson 分解。真实研究池只有十几只股票，不够支撑八因子合成组合相对市值基准的行业归因。单因子的行业和规模暴露在各因子页。</div>
+  {% if payload.mode == 'cn_pit' %}
+  <div class="note">这个结果里没有 Brinson 分解。十几只股票装不下八因子合成组合相对市值基准的行业归因。单因子的行业和规模暴露在各因子页。</div>
+  {% else %}
+  <div class="note">这个结果里没有 Brinson 分解。</div>
+  {% endif %}
 {% else %}
   <p class="verdict-line">{{ payload.brinson_read }}</p>
   {% if payload.industry_tilt %}<p class="hint">{{ payload.industry_tilt }}</p>{% endif %}
   <div class="cards">
-    <div class="card"><span>被检验的组合</span><strong>得分最高的 20%</strong><span>8 个因子合成后等权持有</span></div>
+    <div class="card"><span>被检验的组合</span><strong>没有约束的前 20%</strong><span>8 个因子合成后等权持有，不限制行业和规模</span></div>
     <div class="card"><span>对照</span><strong>市值加权</strong><span>同一批股票里的基准</span></div>
     <div class="card"><span>拆开的问题</span><strong>配置还是选股</strong><span>行业之间，还是行业内部</span></div>
   </div>
@@ -20,11 +24,12 @@
     <div class="card"><span>基准累计收益</span><strong>{{ pct(payload.brinson.benchmark_return) }}</strong><span>同一窗口的市值加权基准 · 未年化 · 未扣费</span></div>
     <div class="card"><span>累计主动收益</span><strong>{{ pct(payload.brinson.active_return) }}</strong><span>组合累计减基准累计 · 未年化 · 未扣费</span></div>
   </div>
-  <p class="hint">下面行业表里的权重是各持有月的简单平均。配置、选股、交互是 Carino 链接后的累计贡献，加总等于上面的累计主动收益。都未扣费。最后一期若没有下月收益，不计入这 {{ num(payload.brinson.n_periods, 0) }} 个月。逐月效应和链接后的贡献在 <a href="/download/periods_brinson.csv">逐月 Brinson</a>，把链接后的三列分别加总，应回到上面的累计值。</p>
+  <p class="hint">下面行业表里的权重是各持有月的简单平均。配置、选股、交互是 Carino 链接后的累计贡献，加总等于上面的累计主动收益。都未扣费。最后一期若没有下月收益，不计入这 {{ num(payload.brinson.n_periods, 0) }} 个月。逐月效应和链接后的贡献在 <a href="/download/periods_brinson.csv{{ universe_q }}">逐月 Brinson</a>，把链接后的三列分别加总，应回到上面的累计值。</p>
   <div class="grid">
     {% if waterfall %}<img class="chart" src="{{ waterfall }}" alt="归因瀑布" />{% endif %}
     {% if timeline %}<img class="chart" src="{{ timeline }}" alt="分月效应" />{% endif %}
   </div>
+  <div class="table-wrap">
   <table>
     <thead>
       <tr>
@@ -39,6 +44,7 @@
     </thead>
     <tbody>
       {% for row in payload.brinson.groups %}
+      {% if loop.index <= 10 %}
       <tr>
         <td class="left">{{ row.group }}</td>
         <td>{{ pct(row.wp) }}</td>
@@ -48,8 +54,122 @@
         <td>{{ pct(row.interaction) }}</td>
         <td>{{ pct(row.total) }}</td>
       </tr>
+      {% endif %}
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  {% if payload.brinson.groups|length > 10 %}
+  <details class="fold">
+    <summary>其余 {{ payload.brinson.groups|length - 10 }} 个行业</summary>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="left">行业</th>
+          <th>组合权重（期间平均）</th>
+          <th>基准权重（期间平均）</th>
+          <th>配置（累计）</th>
+          <th>选股（累计）</th>
+          <th>交互（累计）</th>
+          <th>合计（累计）</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in payload.brinson.groups %}
+        {% if loop.index > 10 %}
+        <tr>
+          <td class="left">{{ row.group }}</td>
+          <td>{{ pct(row.wp) }}</td>
+          <td>{{ pct(row.wb) }}</td>
+          <td>{{ pct(row.allocation) }}</td>
+          <td>{{ pct(row.selection) }}</td>
+          <td>{{ pct(row.interaction) }}</td>
+          <td>{{ pct(row.total) }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </details>
+  {% endif %}
+  <h2>行业和规模贴着基准</h2>
+  <p class="hint">每个行业的权重要等于基准里该行业的市值权重。行业内按市值中位数分成大小两桶，每桶的权重等于基准里这一桶的市值权重，桶里只留复合得分最高的一只。桶里没有得分时，权重放在市值最大的那只上。这样行业配置接近零，剩下的超额来自桶内选股。风险页仍用上面那本没有约束的组合。逐月文件也仍是那一本。</p>
+  {% if payload.brinson_neutral and payload.brinson_neutral.groups %}
+  <p class="verdict-line">{{ payload.brinson_neutral_read }}</p>
+  <div class="cards">
+    <div class="card"><span>组合累计收益</span><strong>{{ pct(payload.brinson_neutral.portfolio_return) }}</strong><span>同一窗口 · {{ num(payload.brinson_neutral.n_periods, 0) }} 个持有月 · 未年化 · 未扣费</span></div>
+    <div class="card"><span>基准累计收益</span><strong>{{ pct(payload.brinson_neutral.benchmark_return) }}</strong><span>与上面同一套市值基准</span></div>
+    <div class="card"><span>累计主动收益</span><strong>{{ pct(payload.brinson_neutral.active_return) }}</strong><span>未年化 · 未扣费</span></div>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th class="left">行业</th>
+        <th>组合权重（期间平均）</th>
+        <th>基准权重（期间平均）</th>
+        <th>配置（累计）</th>
+        <th>选股（累计）</th>
+        <th>交互（累计）</th>
+        <th>合计（累计）</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in payload.brinson_neutral.groups %}
+      {% if loop.index <= 10 %}
+      <tr>
+        <td class="left">{{ row.group }}</td>
+        <td>{{ pct(row.wp) }}</td>
+        <td>{{ pct(row.wb) }}</td>
+        <td>{{ pct(row.allocation) }}</td>
+        <td>{{ pct(row.selection) }}</td>
+        <td>{{ pct(row.interaction) }}</td>
+        <td>{{ pct(row.total) }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if payload.brinson_neutral.groups|length > 10 %}
+  <details class="fold">
+    <summary>其余 {{ payload.brinson_neutral.groups|length - 10 }} 个行业</summary>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="left">行业</th>
+          <th>组合权重（期间平均）</th>
+          <th>基准权重（期间平均）</th>
+          <th>配置（累计）</th>
+          <th>选股（累计）</th>
+          <th>交互（累计）</th>
+          <th>合计（累计）</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in payload.brinson_neutral.groups %}
+        {% if loop.index > 10 %}
+        <tr>
+          <td class="left">{{ row.group }}</td>
+          <td>{{ pct(row.wp) }}</td>
+          <td>{{ pct(row.wb) }}</td>
+          <td>{{ pct(row.allocation) }}</td>
+          <td>{{ pct(row.selection) }}</td>
+          <td>{{ pct(row.interaction) }}</td>
+          <td>{{ pct(row.total) }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </details>
+  {% endif %}
+  {% else %}
+  <p class="hint">这一版结果还没有行业和规模中性的组合。重新生成研究结果后，这里会并排显示。</p>
+  {% endif %}
 {% endif %}
 {% endblock %}

@@ -10,7 +10,7 @@ import polars as pl
 from factorlab.eval.backtest import assign_quantile_groups, quantile_backtest
 from factorlab.eval.ic import rank_ic_series
 from factorlab.eval.metrics import performance_stats, summarize_series
-from factorlab.research.costs import FULL_COST, annualized_net, net_returns
+from factorlab.research.costs import FULL_COST, impacts_for_dates, net_returns, participation_by_date
 from factorlab.research.oos import holm_adjust, one_sided_p_from_t, rolling_windows, split_dates
 from factorlab.research.status import research_status
 from factorlab.schema import FACTORS
@@ -54,20 +54,47 @@ def _book_arrays(result):
     return frame["date"].to_list(), frame["ret"].to_list(), frame["turnover"].to_list()
 
 
-def _metrics_for_dates(panel, spec, dates: list) -> dict | None:
+def _metrics_for_dates(
+    panel,
+    spec,
+    dates: list,
+    min_names: int = 12,
+    respect_tradable: bool = False,
+) -> dict | None:
     sample = _subset(panel, dates)
     if sample.height == 0:
         return None
     signed = sample.with_columns((pl.col(spec.neu_name) * spec.direction).alias("_signed"))
-    ic = rank_ic_series(signed, "_signed", min_names=12)
+    ic = rank_ic_series(signed, "_signed", min_names=min_names)
     ic_stats = summarize_series(ic["ic"].to_numpy(), nw_lags=1)
-    backtest = quantile_backtest(sample, spec.neu_name, direction=spec.direction, n_groups=5, min_names=12)
+    backtest = quantile_backtest(
+        sample,
+        spec.neu_name,
+        direction=spec.direction,
+        n_groups=5,
+        min_names=min_names,
+        respect_tradable=respect_tradable,
+    )
     dates_ls, gross, turns = _book_arrays(backtest)
     groups = _group_means(backtest)
-    net = net_returns(gross, turns, FULL_COST)
+    impacts = None
+    if "dollar_volume" in sample.columns:
+        by_date = participation_by_date(
+            backtest.weights,
+            sample,
+            base_bps=float(FULL_COST["impact_bps"]),
+        )
+        impacts = impacts_for_dates(by_date, dates_ls)
+    net = net_returns(gross, turns, FULL_COST, impacts)
     net_stats = performance_stats(net)
     net_summary = summarize_series(np.asarray(net, dtype=float), nw_lags=1)
-    exposure = long_short_exposure(sample, spec.neu_name, spec.direction)
+    exposure = long_short_exposure(
+        sample,
+        spec.neu_name,
+        spec.direction,
+        min_names=min_names,
+        respect_tradable=respect_tradable,
+    )
     return {
         "ic": ic_stats,
         "gross": backtest.summary,
@@ -79,6 +106,7 @@ def _metrics_for_dates(panel, spec, dates: list) -> dict | None:
         "dates": [str(d) for d in dates_ls],
         "gross_returns": [float(v) for v in gross],
         "net_returns": [float(v) for v in net],
+        "impact_series": [float(v) for v in impacts] if impacts else [],
         "turnover": [None if v is None or not math.isfinite(float(v)) else float(v) for v in turns],
         "exposure": exposure,
     }
@@ -91,6 +119,7 @@ def long_short_exposure(
     *,
     min_names: int = 12,
     n_groups: int = 5,
+    respect_tradable: bool = False,
 ) -> dict:
     """多头等权相对空头等权的行业权重和对数市值差。正的规模差表示多头公司更大。"""
 
@@ -104,6 +133,9 @@ def long_short_exposure(
     values = ordered[factor].to_numpy()
     caps = ordered["mktcap"].to_numpy()
     industries = ordered["industry"].to_numpy()
+    tradable_values = None
+    if respect_tradable and "tradable" in ordered.columns:
+        tradable_values = ordered["tradable"].fill_null(False).cast(pl.Boolean).to_numpy()
     _, starts = np.unique(dates, return_index=True)
     ends = np.r_[starts[1:], ordered.height]
     long_group = n_groups if direction > 0 else 1
@@ -115,6 +147,8 @@ def long_short_exposure(
         cap = np.asarray(caps[start:end], dtype=float)
         labels = industries[start:end]
         usable = np.isfinite(val) & np.isfinite(cap) & (cap > 0)
+        if tradable_values is not None:
+            usable = usable & tradable_values[start:end].astype(bool)
         if int(usable.sum()) < min_names:
             continue
         groups = assign_quantile_groups(np.where(usable, val, np.nan), n_groups)
@@ -169,7 +203,12 @@ def _weights(labels: np.ndarray) -> dict[str, float]:
     return out
 
 
-def evaluate_universe(panel: pl.DataFrame) -> list[dict]:
+def evaluate_universe(
+    panel: pl.DataFrame,
+    *,
+    min_names: int = 12,
+    respect_tradable: bool = False,
+) -> list[dict]:
     dates = panel["date"].unique().sort().to_list()
     development, holdout = split_dates(dates)
     windows = rolling_windows(development)
@@ -181,9 +220,9 @@ def evaluate_universe(panel: pl.DataFrame) -> list[dict]:
         if spec.neu_name not in panel.columns:
             continue
         kept.append(spec)
-        dev = _metrics_for_dates(panel, spec, development)
-        oos = _metrics_for_dates(panel, spec, test_dates) if test_dates else None
-        held = _metrics_for_dates(panel, spec, holdout)
+        dev = _metrics_for_dates(panel, spec, development, min_names, respect_tradable)
+        oos = _metrics_for_dates(panel, spec, test_dates, min_names, respect_tradable) if test_dates else None
+        held = _metrics_for_dates(panel, spec, holdout, min_names, respect_tradable)
         candidate = bool(
             dev
             and dev["ic"]["mean"] > 0
@@ -200,7 +239,7 @@ def evaluate_universe(panel: pl.DataFrame) -> list[dict]:
                 "development": dev,
                 "oos": oos,
                 "holdout": held,
-                "full": _metrics_for_dates(panel, spec, dates),
+                "full": _metrics_for_dates(panel, spec, dates, min_names, respect_tradable),
                 "windows": len(windows),
             }
         )

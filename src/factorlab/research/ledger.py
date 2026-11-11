@@ -13,7 +13,7 @@ import polars as pl
 from factorlab.eval.backtest import quantile_backtest
 from factorlab.eval.ic import rank_ic_series
 from factorlab.research.costs import FULL_COST, flat_side, month_cost_parts
-from factorlab.research.lineage import manifest, run_config
+from factorlab.research.lineage import manifest, project_root, run_config
 from factorlab.schema import FACTORS
 
 
@@ -62,7 +62,29 @@ def write_trace(
     _write_csv(out / "periods_weights.csv", weights, _WEIGHT_FIELDS)
     _write_csv(out / "periods_brinson.csv", _brinson_rows(periods), _BRINSON_FIELDS)
     (out / "run.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    _archive_run(out, record)
     return record
+
+
+def _archive_run(out: Path, record: dict) -> None:
+    """发布目录里的 run.json 再抄一份到 data/runs，方便以后对照。测试用的临时目录不抄。"""
+
+    releases = (project_root() / "data" / "releases").resolve()
+    try:
+        resolved = out.resolve()
+    except OSError:
+        return
+    if resolved != releases and releases not in resolved.parents:
+        return
+    run_id = str(record.get("run_id") or "")
+    if not run_id or any(char in run_id for char in ("/", "\\", "..")):
+        return
+    archive = project_root() / "data" / "runs"
+    archive.mkdir(parents=True, exist_ok=True)
+    (archive / f"{run_id}.json").write_text(
+        json.dumps(record, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 _IC_FIELDS = ["factor", "date", "ic", "n"]

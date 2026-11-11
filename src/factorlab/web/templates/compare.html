@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% from "_chart.html" import line_chart %}
+{% block title %}对照 · 因子工作台{% endblock %}
+{% block body %}
+<p class="kicker">同一次参数，并排看 2 到 3 个因子</p>
+<h1>哪几个因子的净多空走在一起</h1>
+<p class="hint">曲线从缓存面板现算。最多三个因子。这页不改任何因子的结论，也不新开 run ID。地址栏可以转发给别人。下面的策略 IC、Newey–West t、毛多空和净多空都是「{{ window_label }}」。不填日期、分组为 5 且去掉市值和行业时，这个窗口就是研究样本的全部月末，和首页「全样本」用同一套停牌、涨跌停规则。开发样本的 t 和毛多空写在首页说明文字里，不在这张表上。</p>
+<form class="filters" method="get">
+  {% if universe_id %}<input type="hidden" name="universe" value="{{ universe_id }}">{% endif %}
+  <div class="checks">
+    {% for spec in factors %}
+    <label><input type="checkbox" name="factors" value="{{ spec.name }}" {{ 'checked' if spec.name in selected else '' }}> {{ spec.label }}</label>
+    {% endfor %}
+  </div>
+  <label>起始 <input name="start" value="{{ start }}" placeholder="{{ sample_first }}"></label>
+  <label>结束 <input name="end" value="{{ end }}" placeholder="{{ sample_last }}"></label>
+  <label>分组
+    <select name="groups">
+      <option value="5" {{ 'selected' if groups == 5 else '' }}>5 组</option>
+      <option value="10" {{ 'selected' if groups == 10 else '' }}>10 组</option>
+    </select>
+  </label>
+  <label>中性化
+    <select name="neu">
+      <option value="1" {{ 'selected' if neu else '' }}>去掉市值和行业</option>
+      <option value="0" {{ 'selected' if not neu else '' }}>原始因子</option>
+    </select>
+  </label>
+  <label>成本
+    <select name="cost">
+      {% for key, preset in presets.items() %}
+      <option value="{{ key }}" {{ 'selected' if key == cost_name else '' }}>{{ preset.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>或单边 bp <input name="bps" value="{{ bps }}" inputmode="decimal" placeholder="例如 10"></label>
+  <button type="submit">对照</button>
+</form>
+{% if date_error %}<p class="hint">{{ date_error }}</p>{% endif %}
+{% if bps_error %}<p class="hint">{{ bps_error }}</p>{% endif %}
+{% if trimmed %}<p class="hint">只保留前三个因子。</p>{% endif %}
+{% if rows %}
+{{ line_chart(chart, "净多空对照") }}
+<p class="hint">纵轴是净值，横轴是月末。这些线都是当前成本下的净多空，起点为 1。图例和下面的表用同一个名字。鼠标停在点上可看该月净值。</p>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th class="left">因子</th>
+      <th>策略 IC</th>
+      <th>Newey–West t</th>
+      <th>{{ window_label }}毛多空年化</th>
+      <th>{{ window_label }}净多空年化</th>
+      <th>多头扣费后相对等权</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td class="left"><a href="/factor/{{ row.spec.name }}{{ universe_q }}">{{ row.spec.label }}</a></td>
+      <td>{{ num(row.ic, 3) }}</td>
+      <td>{{ num(row.nw_t, 2) }}</td>
+      <td class="{{ 'pos' if row.ls_ann is not none and row.ls_ann >= 0 else 'neg' }}">{{ pct(row.ls_ann) }}</td>
+      <td class="{{ 'pos' if row.net_ann is not none and row.net_ann >= 0 else 'neg' }}">{{ pct(row.net_ann) }}</td>
+      <td class="{{ 'pos' if row.excess_net_ann is not none and row.excess_net_ann >= 0 else 'neg' }}">{{ pct(row.excess_net_ann) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% elif selected %}
+<p class="hint">这组参数下没有够用的截面，算不出对照曲线。</p>
+{% endif %}
+{% if corr %}
+<h2>去掉市值和行业之后，这些因子有多像</h2>
+<p class="hint">格子里是各月截面 Spearman 的平均。勾选两个或三个因子时，表里只留这几个；否则是全部八个。合成组合不按这张表调权重：八个因子先按研究假设的方向调号，再各自做截面 z 分数，然后等权相加。一只股票至少要覆盖一半因子才进入组合。</p>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th class="left">因子</th>
+      {% for row in corr %}<th>{{ row.label }}</th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in corr %}
+    <tr>
+      <td class="left">{{ row.label }}</td>
+      {% for value in row.cells %}<td>{{ num(value, 2) }}</td>{% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

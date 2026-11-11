@@ -26,6 +26,16 @@ python -m factorlab.web --out output/demo --port 5057
 
 源码：https://github.com/hantrleko/factor-workbench
 
+沪深 300 点时样本用中证指数公告整理的调入日、调出日，不用抓取日的成分名单。财务仍按公告日进入。数据缓存可以中断后继续：
+
+```powershell
+python -m factorlab.data.csi300_pit
+python -m factorlab.data.build_csi300
+python -m factorlab.web --out data/releases/csi300_pit_v1 --port 5058
+```
+
+成分表在 `data/reference/csi300_history.csv`，来源是 [index-constitution](https://github.com/unliftedq/index-constitution) 的 `history/csi300.csv`，抓取日期写在旁边的说明文件里。免费行情和财务报表有缺口；跑不出来的因子保持“研究中”，不要把它读成指数增强结果。每次结果目录里的 `run.json` 给出运行编号、代码版本和 `1e-8` 的复算容差。
+
 外部数据：
 
 ```powershell

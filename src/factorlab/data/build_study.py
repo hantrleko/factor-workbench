@@ -69,6 +69,7 @@ def _jsonable(report: dict) -> dict:
         "oos_exposure": (oos.get("exposure") if oos else None)
         or {"size_spread": None, "industries": [], "n_months": 0},
         "net_returns": full.get("net_returns") or [],
+        "impact_series": full.get("impact_series") or [],
     }
 
 

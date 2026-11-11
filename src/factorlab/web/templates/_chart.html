@@ -1,0 +1,27 @@
+{% macro line_chart(chart, label) %}
+{% if chart and chart.series %}
+<svg class="chart" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ label }}" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  {% for tick in chart.y_ticks %}
+  <line class="grid" x1="{{ chart.x0 }}" x2="{{ chart.x1 }}" y1="{{ tick.y }}" y2="{{ tick.y }}"></line>
+  <text class="tick" x="{{ chart.x0 - 8 }}" y="{{ tick.y }}" text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
+  {% endfor %}
+  {% for tick in chart.x_ticks %}
+  <text class="tick" x="{{ tick.x }}" y="{{ chart.y1 + 16 }}" text-anchor="{{ tick.anchor }}">{{ tick.label }}</text>
+  {% endfor %}
+  <line class="axis-line" x1="{{ chart.x0 }}" y1="{{ chart.y0 }}" x2="{{ chart.x0 }}" y2="{{ chart.y1 }}"></line>
+  <line class="axis-line" x1="{{ chart.x0 }}" y1="{{ chart.y1 }}" x2="{{ chart.x1 }}" y2="{{ chart.y1 }}"></line>
+  {% for item in chart.legend %}
+  <line x1="{{ item.x }}" y1="16" x2="{{ item.x + 14 }}" y2="16" stroke="{{ item.color }}" stroke-width="3"></line>
+  <text class="tick" x="{{ item.x + 18 }}" y="16" dominant-baseline="middle">{{ item.name }}</text>
+  {% endfor %}
+  {% for series in chart.series %}
+  <polyline points="{{ series.path }}" fill="none" stroke="{{ series.color }}" stroke-width="2"></polyline>
+  {% endfor %}
+  {% for series in chart.series %}
+  {% for point in series.points %}
+  <circle cx="{{ point.x }}" cy="{{ point.y }}" r="3.5" fill="{{ series.color }}"><title>{{ point.title }}</title></circle>
+  {% endfor %}
+  {% endfor %}
+</svg>
+{% endif %}
+{% endmacro %}

@@ -302,6 +302,30 @@ def estimate_barra(
     )
 
 
+def _pairwise_covariance(values: np.ndarray, min_obs: int = 12) -> np.ndarray | None:
+    """两两都有足够月份时才给出协方差。任何一对不够，就返回 None。"""
+
+    arr = np.asarray(values, dtype=float)
+    if arr.ndim != 2 or arr.shape[1] < 1 or arr.shape[0] < min_obs:
+        return None
+    width = arr.shape[1]
+    cov = np.zeros((width, width), dtype=float)
+    for left in range(width):
+        for right in range(left, width):
+            mask = np.isfinite(arr[:, left]) & np.isfinite(arr[:, right])
+            if int(mask.sum()) < min_obs:
+                return None
+            if left == right:
+                cov[left, left] = float(np.var(arr[mask, left], ddof=1))
+            else:
+                pair = float(np.cov(arr[mask, left], arr[mask, right], ddof=1)[0, 1])
+                cov[left, right] = pair
+                cov[right, left] = pair
+    if not np.isfinite(cov).all():
+        return None
+    return cov
+
+
 def _risk_decomposition(
     factor_returns: pl.DataFrame,
     specific: pl.DataFrame,
@@ -317,17 +341,38 @@ def _risk_decomposition(
     expo_cols = [c for c in exposures.columns if c not in {date_col, id_col}]
     common = [c for c in factor_cols if c in expo_cols]
     if len(common) < 2:
-        return {}
-    hist = factor_returns.select(common).drop_nulls()
-    if hist.height < len(common) + 2:
+        return {"note": "能对上暴露的因子不足两个，没有计算波动分解。"}
+    frame = factor_returns.select(common)
+    usable = []
+    for col in common:
+        series = np.asarray(frame[col].to_numpy(), dtype=float)
+        if int(np.isfinite(series).sum()) >= 12:
+            usable.append(col)
+    if len(usable) < 2:
         return {
-            "note": "因子收益样本短于因子个数，未计算协方差。",
-            "n_periods": float(hist.height),
+            "note": "有效月份达到 12 的因子不足两个，没有计算波动分解。",
+            "n_periods": float(frame.height),
             "n_factors": float(len(common)),
         }
-    cov = np.cov(hist.to_numpy(), rowvar=False, ddof=1)
-    if cov.ndim == 0:
-        cov = np.array([[float(cov)]])
+    hist = frame.select(usable)
+    arr = np.asarray(hist.to_numpy(), dtype=float)
+    finite_months = int(np.isfinite(arr).any(axis=1).sum())
+    cov = _pairwise_covariance(arr)
+    note = ""
+    if cov is None or finite_months < len(usable) + 2:
+        variances = np.nanvar(arr, axis=0, ddof=1)
+        variances = np.where(np.isfinite(variances), variances, 0.0)
+        cov = np.diag(variances)
+        note = (
+            f"波动分解用了 {len(usable)} 个因子、{finite_months} 个月。"
+            "因子个数不少于有效月份，完整协方差估不出来。"
+            "因子部分只加总各因子自身方差，不算因子之间的相关性。"
+        )
+    dropped = len(common) - len(usable)
+    if dropped:
+        extra = f"另有 {dropped} 个因子有效月份不足 12，没有进入波动分解。"
+        note = f"{note} {extra}".strip()
+    common = usable
 
     pw = portfolio_weights.filter(pl.col(date_col) == asof)
     bw = benchmark_weights.filter(pl.col(date_col) == asof)
@@ -373,8 +418,15 @@ def _risk_decomposition(
     spec_var = 0.0
     for ticker, h in zip(merged[id_col].to_list(), active, strict=True):
         spec_var += float(h) ** 2 * float(var_map.get(ticker, median))
+    if not np.isfinite(factor_var) or not np.isfinite(spec_var):
+        return {
+            "note": note or "波动分解出现非数值，没有写出年化波动。",
+            "n_periods": float(hist.height),
+            "n_factors": float(len(common)),
+        }
     return {
         "asof": str(asof),
+        "note": note,
         "factor_var_m": factor_var,
         "specific_var_m": float(spec_var),
         "total_var_m": float(factor_var + spec_var),

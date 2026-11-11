@@ -319,10 +319,7 @@ def _numeric(frame: pd.DataFrame, name: str, fill: float | None = None) -> pd.Se
     return values
 
 
-def _fundamentals_one(code: str) -> pd.DataFrame:
-    balance = _statement(code, "bs")
-    income = _statement(code, "is")
-    cash = _statement(code, "cf")
+def statements_to_fundamentals(code: str, balance: pd.DataFrame, income: pd.DataFrame, cash: pd.DataFrame) -> pd.DataFrame:
     keys = ["REPORT_DATE", "REPORT_TYPE", "NOTICE_DATE"]
     merged = balance[keys + [c for c in ["TOTAL_ASSETS", "TOTAL_LIAB_EQUITY", "TOTAL_CURRENT_ASSETS", "MONETARYFUNDS", "TOTAL_CURRENT_LIAB", "SHORT_LOAN", "TAX_PAYABLE", "TOTAL_EQUITY"] if c in balance.columns]]
     merged = merged.merge(income[keys + [c for c in ["OPERATE_INCOME", "NETPROFIT"] if c in income.columns]], on=keys, how="inner")
@@ -369,6 +366,15 @@ def _fundamentals_one(code: str) -> pd.DataFrame:
             "capex_ytd": ytd_values["capex_ytd"],
             "depreciation_ytd": ytd_values["depreciation_ytd"],
         }
+    )
+
+
+def _fundamentals_one(code: str) -> pd.DataFrame:
+    return statements_to_fundamentals(
+        code,
+        _statement(code, "bs"),
+        _statement(code, "is"),
+        _statement(code, "cf"),
     )
 
 

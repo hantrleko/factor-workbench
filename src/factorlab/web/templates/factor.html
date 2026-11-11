@@ -1,15 +1,63 @@
 {% extends "base.html" %}
+{% from "_chart.html" import line_chart %}
 {% block title %}{{ spec.question }}{% endblock %}
 {% block body %}
-<p><a href="/">回到 8 次检验</a></p>
+<p><a href="/{{ universe_q }}">回到 8 次检验</a></p>
 <p class="kicker">这次只检验这一个因子：{{ spec.label }}</p>
 <h1>{{ spec.question }}</h1>
+<nav class="section-nav" aria-label="本页分区">
+  <a href="#conclusion">结论</a>
+  <a href="#curves">曲线</a>
+  <a href="#exposure">暴露</a>
+  <a href="#method">方法</a>
+</nav>
+
+<section class="section" id="conclusion">
+<h2>结论</h2>
 {% if row %}
 <p class="verdict-line"><span class="pill {{ row.verdict_tone }}">{{ row.verdict }}</span> {{ row.because }}</p>
+{% if conflict %}<p class="hint">{{ conflict }}</p>{% endif %}
 {% endif %}
+<div class="cards">
+  <div class="card"><span>检验对象</span><strong>{{ spec.label }}</strong><span>{{ spec.family }}</span></div>
+  <div class="card"><span>预测目标</span><strong>下个月收益</strong><span>形成月本身不算进去</span></div>
+  <div class="card"><span>多头是谁</span><strong>{{ spec.direction_text }}</strong></div>
+  <div class="card"><span>样本</span><strong>{{ payload.universe.n_stocks }} 只</strong><span>{{ payload.universe.start }} 至 {{ payload.universe.end }}</span></div>
+</div>
+<div class="card">
+  <p>{{ spec.definition }}</p>
+  <p>算法：{{ spec.formula }}</p>
+  {% if row %}
+  {% if payload.real %}
+  <p>全样本策略 Rank IC {{ num(row.ic, 3) }}。普通 t {{ num(row.t, 2) }}，Newey–West t {{ num(row.nw_t, 2) }}。全样本五分组毛多空几何年化 {{ pct(row.ls_ann) }}，最大回撤 {{ pct(row.ls_mdd) }}，月均单边换手 {{ pct(row.turnover) }}，完整成本后年化 {{ pct(row.net_full) }}、回撤 {{ pct(row.net_mdd) }}。滚动测试的 Newey–West t {{ num(row.oos_nw_t, 2) }}，完整成本后年化 {{ pct(row.oos_net_ann) }}，五分组是否单调：{{ '是' if row.oos_monotone else '否' }}。保留样本完整成本后年化 {{ pct(row.holdout_net_ann) }}，Newey–West t {{ num(row.holdout_nw_t, 2) }}。Holm p {{ num(row.holm_p, 3) }}。这些门槛没有全部成立时，结论保持为研究中或样本内候选。</p>
+  {% else %}
+  <p>策略 Rank IC {{ num(row.ic, 3) }}。普通 t {{ num(row.t, 2) }}，Newey–West t {{ num(row.nw_t, 2) }}。结论使用 Newey–West t，而不是普通 t。五分组毛多空几何年化 {{ pct(row.ls_ann) }}，最大回撤 {{ pct(row.ls_mdd) }}，月均单边换手 {{ pct(row.turnover) }}。这一页的合成结果只有样本内候选，没有样本外，也没有多重检验校正。</p>
+  {% endif %}
+  {% endif %}
+  {% if ortho %}
+  <p>在这个样本、这个市值和行业回归里，残差和市值的相关、以及各行业残差均值，最大绝对值是 {{ num(ortho.size_corr, 2) }} 这一量级。这只说明因子值本身被这些变量解释掉了，不能据此说多空持仓没有行业或市值暴露。</p>
+  {% endif %}
+</div>
+</section>
+
+<section class="section" id="curves">
+<h2>曲线</h2>
 <form class="filters" method="get">
-  <label>起始 <input name="start" value="{{ start }}" placeholder="2021-01-31"></label>
-  <label>结束 <input name="end" value="{{ end }}" placeholder="2024-12-31"></label>
+  {% if universe_id %}<input type="hidden" name="universe" value="{{ universe_id }}">{% endif %}
+  <label>起始 <input name="start" value="{{ start }}" placeholder="{{ sample_first }}"></label>
+  <label>结束 <input name="end" value="{{ end }}" placeholder="{{ sample_last }}"></label>
+  <label>分组
+    <select name="groups">
+      <option value="5" {{ 'selected' if groups == 5 else '' }}>5 组</option>
+      <option value="10" {{ 'selected' if groups == 10 else '' }}>10 组</option>
+    </select>
+  </label>
+  <label>中性化
+    <select name="neu">
+      <option value="1" {{ 'selected' if neu else '' }}>去掉市值和行业</option>
+      <option value="0" {{ 'selected' if not neu else '' }}>原始因子</option>
+    </select>
+  </label>
   <label>成本
     <select name="cost">
       {% for key, preset in presets.items() %}
@@ -22,40 +70,98 @@
 </form>
 {% if date_error %}<p class="hint">{{ date_error }}</p>{% endif %}
 {% if bps_error %}<p class="hint">{{ bps_error }}</p>{% endif %}
-<p class="hint">填写单边 bp 时，按这个费率现算：月成本 = 单边换手 × 2 × 费率，不计点差、冲击和借券。留空则用左侧的成本组合。改区间或成本只改曲线和下面的成本拆项，不改结论，也不新开 run ID。</p>
+<p class="hint">地址栏就是这组参数，可以直接转发。填写单边 bp 时，按这个费率现算：月成本 = 单边换手 × 2 × 费率，不计点差、冲击和借券。留空则用左侧的成本组合。改区间、成本、分组或中性化，只改曲线和成本拆项，不改结论，也不新开 run ID。</p>
 {% if curve.gross %}
-<p class="hint">{% if curve.official %}当前曲线覆盖官方评估所用的全部持有月，成本是完整假设。{% else %}当前是浏览窗口，不改写结论。{% endif %}共 {{ curve.n_months }} 个持有月。区间毛多空最大回撤 {{ pct(curve.gross_mdd) }}，净回撤 {{ pct(curve.net_mdd) }}，月均单边换手 {{ pct(curve.turnover) }}。</p>
-<svg class="chart" viewBox="0 0 640 180" role="img" aria-label="毛收益与净收益净值">
-  <polyline points="{{ curve.gross }}" fill="none" stroke="#12343b" stroke-width="2"></polyline>
-  <polyline points="{{ curve.net }}" fill="none" stroke="#a24b32" stroke-width="2"></polyline>
-</svg>
-<p class="hint">深色是毛净值，铜色是当前成本假设下的净净值。起点都是 1。{% if cost_drag %}月均成本：佣金 {{ pct(cost_drag.commission) }}，半点差 {{ pct(cost_drag.half_spread) }}，冲击 {{ pct(cost_drag.impact) }}，借券 {{ pct(cost_drag.borrow) }}。{% endif %}</p>
-<svg class="chart" viewBox="0 0 640 140" role="img" aria-label="毛收益与净收益回撤">
-  <polyline points="{{ curve.drawdown_gross }}" fill="none" stroke="#12343b" stroke-width="2"></polyline>
-  <polyline points="{{ curve.drawdown_net }}" fill="none" stroke="#a24b32" stroke-width="2"></polyline>
-</svg>
-<p class="hint">下图是从 0 往下的回撤。深色是毛回撤，铜色是净回撤。</p>
+<p class="hint">{% if curve.official %}当前曲线是全样本：官方评估所用的全部持有月，成本是完整假设，分组是 5，因子已中性化。{% elif curve.custom %}当前是浏览窗口：分组或中性化与官方评估不同，曲线从缓存面板现算，不改写结论。{% else %}当前是浏览窗口，不改写结论。{% endif %}曲线上的回撤和换手属于「{{ window_label }}」，不是开发样本。共 {{ curve.n_months }} 个持有月。区间毛多空最大回撤 {{ pct(curve.gross_mdd) }}，净回撤 {{ pct(curve.net_mdd) }}，月均单边换手 {{ pct(curve.turnover) }}。</p>
+{{ line_chart(curve.nav_chart, "毛收益与净收益净值") }}
+<p class="hint">纵轴是净值，横轴是月末。图例在上方，鼠标停在点上可看该月数值。起点都是 1。{% if curve.participation %}冲击按当月成交额占比计。{% endif %}{% if cost_drag %}月均成本：佣金 {{ pct(cost_drag.commission) }}，半点差 {{ pct(cost_drag.half_spread) }}，冲击 {{ pct(cost_drag.impact) }}，借券 {{ pct(cost_drag.borrow) }}。{% endif %}<a href="/factor/{{ spec.name }}/series.csv?{{ request.query_string.decode() }}">下载这条曲线</a></p>
+{{ line_chart(curve.dd_chart, "毛收益与净收益回撤") }}
+<p class="hint">纵轴是从 0 往下的回撤。深色是毛回撤，铜色是净回撤。</p>
 {% endif %}
+{% if curve.long_book and curve.long_book.dates %}
+<h2>多头相对基准的超额</h2>
+<p class="hint">多头是当前分组里该买的那一组，等权。等权基准是当月有收益和正市值的股票的简单平均，市值基准用这些股票的市值加权。超额 = 多头收益 − 基准收益。多头成本含佣金、半点差和冲击，不含借券。这组数字不改结论。</p>
+<div class="cards">
+  <div class="card"><span>多头毛年化</span><strong>{{ pct(curve.long_book.long_ann) }}</strong></div>
+  <div class="card"><span>等权基准年化</span><strong>{{ pct(curve.long_book.ew_ann) }}</strong></div>
+  <div class="card"><span>市值基准年化</span><strong>{{ pct(curve.long_book.cw_ann) }}</strong></div>
+  <div class="card"><span>扣费后相对等权</span><strong>{{ pct(curve.long_book.excess_net_ann) }}</strong><span>多头净收益减等权基准</span></div>
+</div>
+{{ line_chart(curve.long_book.chart, "多头、等权基准和市值基准") }}
+<p class="hint">月均单边换手 {{ pct(curve.long_book.turnover) }}。相对市值的毛超额年化 {{ pct(curve.long_book.excess_cw_ann) }}。</p>
+{% endif %}
+</section>
+
+<section class="section" id="exposure">
+<h2>暴露</h2>
 {% if curve.exposure and curve.exposure.n_months %}
-<h2>多空两端的行业和规模</h2>
 <p class="hint">按当前浏览区间里能分组的月份平均。规模差是多头平均对数市值减去空头平均对数市值，正数表示多头更大。行业权重是组内等权，主动权重 = 多头权重 − 空头权重。这只描述暴露，不说明收益从哪来。</p>
 <div class="card"><span>对数市值差</span><strong>{{ num(curve.exposure.size_spread, 2) }}</strong><span>{{ curve.exposure.n_months }} 个月</span></div>
+<div class="table-wrap">
 <table>
   <thead>
     <tr><th class="left">行业</th><th>多头权重</th><th>空头权重</th><th>主动权重</th></tr>
   </thead>
   <tbody>
     {% for item in curve.exposure.industries %}
+    {% if loop.index <= 10 %}
     <tr>
       <td class="left">{{ item.name }}</td>
       <td>{{ pct(item.long_weight) }}</td>
       <td>{{ pct(item.short_weight) }}</td>
       <td class="{{ 'pos' if item.active >= 0 else 'neg' }}">{{ pct(item.active) }}</td>
     </tr>
+    {% endif %}
     {% endfor %}
   </tbody>
 </table>
+</div>
+{% if curve.exposure.industries|length > 10 %}
+<details class="fold">
+  <summary>其余 {{ curve.exposure.industries|length - 10 }} 个行业</summary>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th class="left">行业</th><th>多头权重</th><th>空头权重</th><th>主动权重</th></tr>
+    </thead>
+    <tbody>
+      {% for item in curve.exposure.industries %}
+      {% if loop.index > 10 %}
+      <tr>
+        <td class="left">{{ item.name }}</td>
+        <td>{{ pct(item.long_weight) }}</td>
+        <td>{{ pct(item.short_weight) }}</td>
+        <td class="{{ 'pos' if item.active >= 0 else 'neg' }}">{{ pct(item.active) }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
 {% endif %}
+{% endif %}
+{% if curve.groups or (row and row.groups) %}
+<h2>{{ groups }} 组年化，先看该买的那一组</h2>
+<p class="hint">几何年化，由月度毛收益复利，未扣费。正值向右，负值向左，中间是零。第 1 组因子值最低，第 {{ groups }} 组最高。标成「该买」的一组才是这个问题要持有的一端。</p>
+<div class="card bars">
+  <div class="bar-scale"><span></span><span>负 ← 0 → 正</span><span></span></div>
+  {% for g in (curve.groups if curve.groups else row.groups) %}
+  <div class="bar-row">
+    <span class="bar-name">第 {{ g.group }} 组{% if g.is_long %} · 该买{% elif g.is_short %} · 该空{% endif %}</span>
+    <span class="axis" title="第{{ g.group }}组几何年化 {{ pct(g.ann_return) }}，未扣费">
+      <span class="neg-side">{% if g.ann_return < 0 %}<span class="fill neg{% if g.is_long %} long{% endif %}" style="width: {{ '%.0f'|format(g.width) }}%"></span>{% endif %}</span>
+      <span class="pos-side">{% if g.ann_return >= 0 %}<span class="fill pos{% if g.is_long %} long{% endif %}" style="width: {{ '%.0f'|format(g.width) }}%"></span>{% endif %}</span>
+    </span>
+    <span class="bar-value {{ g.tone }}">{{ pct(g.ann_return) }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+</section>
+
+<section class="section" id="method">
+<h2>方法</h2>
 {% if payload.methods %}
 <div class="card">
   <p>公式：{{ spec.formula }}</p>
@@ -70,26 +176,10 @@
   {% endif %}
 </div>
 {% endif %}
-{% if row and row.groups %}
-<h2>五组年化，先看该买的那一组</h2>
-<p class="hint">几何年化，由月度毛收益复利，未扣费。正值向右，负值向左，中间是零。第 1 组因子值最低，第 5 组最高。标成「该买」的一组才是这个问题要持有的一端。</p>
-<div class="card bars">
-  <div class="bar-scale"><span></span><span>负 ← 0 → 正</span><span></span></div>
-  {% for g in row.groups %}
-  <div class="bar-row">
-    <span class="bar-name">第 {{ g.group }} 组{% if g.is_long %} · 该买{% elif g.is_short %} · 该空{% endif %}</span>
-    <span class="axis" title="第{{ g.group }}组几何年化 {{ pct(g.ann_return) }}，未扣费">
-      <span class="neg-side">{% if g.ann_return < 0 %}<span class="fill neg{% if g.is_long %} long{% endif %}" style="width: {{ '%.0f'|format(g.width) }}%"></span>{% endif %}</span>
-      <span class="pos-side">{% if g.ann_return >= 0 %}<span class="fill pos{% if g.is_long %} long{% endif %}" style="width: {{ '%.0f'|format(g.width) }}%"></span>{% endif %}</span>
-    </span>
-    <span class="bar-value {{ g.tone }}">{{ pct(g.ann_return) }}</span>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
 {% if sensitivity %}
 <h2>用逐月换手现算的三种单边成本</h2>
 <p class="hint">每一行都是毛收益减去逐月的单边换手 × 2 × 费率，再做几何年化。不是写死的年化数字。冲击和借券不在这三行里；完整成本的拆项在上面的曲线说明，逐月数字在「逐月多空与成本」。</p>
+<div class="table-wrap">
 <table>
   <thead>
     <tr><th class="left">单边成本</th><th>扣费后多空年化</th></tr>
@@ -103,42 +193,28 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% endif %}
-<div class="cards">
-  <div class="card"><span>检验对象</span><strong>{{ spec.label }}</strong><span>{{ spec.family }}</span></div>
-  <div class="card"><span>预测目标</span><strong>下个月收益</strong><span>形成月本身不算进去</span></div>
-  <div class="card"><span>多头是谁</span><strong>{{ spec.direction_text }}</strong></div>
-  <div class="card"><span>样本</span><strong>{{ payload.universe.n_stocks }} 只</strong><span>{{ payload.universe.start }} 至 {{ payload.universe.end }}</span></div>
-</div>
-<div class="card">
-  <p>{{ spec.definition }}</p>
-  <p>算法：{{ spec.formula }}</p>
-  {% if row %}
-  {% if payload.mode == 'cn_pit' %}
-  <p>全样本策略 Rank IC {{ num(row.ic, 3) }}。普通 t {{ num(row.t, 2) }}，Newey–West t {{ num(row.nw_t, 2) }}。全样本五分组毛多空几何年化 {{ pct(row.ls_ann) }}，最大回撤 {{ pct(row.ls_mdd) }}，月均单边换手 {{ pct(row.turnover) }}，完整成本后年化 {{ pct(row.net_full) }}、回撤 {{ pct(row.net_mdd) }}。滚动测试的 Newey–West t {{ num(row.oos_nw_t, 2) }}，完整成本后年化 {{ pct(row.oos_net_ann) }}，五分组是否单调：{{ '是' if row.oos_monotone else '否' }}。保留样本完整成本后年化 {{ pct(row.holdout_net_ann) }}，Newey–West t {{ num(row.holdout_nw_t, 2) }}。Holm p {{ num(row.holm_p, 3) }}。这些门槛没有全部成立时，结论保持为研究中或样本内候选。</p>
-  {% else %}
-  <p>策略 Rank IC {{ num(row.ic, 3) }}。普通 t {{ num(row.t, 2) }}，Newey–West t {{ num(row.nw_t, 2) }}。结论使用 Newey–West t，而不是普通 t。五分组毛多空几何年化 {{ pct(row.ls_ann) }}，最大回撤 {{ pct(row.ls_mdd) }}，月均单边换手 {{ pct(row.turnover) }}。这一页的合成结果只有样本内候选，没有样本外，也没有多重检验校正。</p>
-  {% endif %}
-  {% endif %}
-  {% if ortho %}
-  <p>在这个样本、这个市值和行业回归里，残差和市值的相关、以及各行业残差均值，最大绝对值是 {{ num(ortho.size_corr, 2) }} 这一量级。这只说明因子值本身被这些变量解释掉了，不能据此说多空持仓没有行业或市值暴露。</p>
-  {% endif %}
-</div>
-<h2>每个月，排序和下月收益是否一致</h2>
-<p class="hint">纵轴是 Rank IC。大于 0 表示这个月按假设排序是对的。虚线是所有月份的平均。</p>
-{% if charts.ic %}<img class="chart" src="{{ charts.ic }}" alt="IC 序列" width="707" height="360" loading="lazy" />{% endif %}
-<h2>因子能管住后面几个月</h2>
-<p class="hint">横轴 1 是下个月，2 是再下一个月。柱子变矮，说明信号很快过时。</p>
-{% if charts.decay %}<img class="chart" src="{{ charts.decay }}" alt="IC 衰减" width="707" height="360" loading="lazy" />{% endif %}
-<h2>五组里，该买的那一组是否在最上面</h2>
-<p class="hint">股票按因子从低到高分成 5 组。图例里标了「多头」的，才是这个问题要买的一组。它应该高于其他组。</p>
-<div class="grid">
-  {% if charts.nav5 %}<img class="chart" src="{{ charts.nav5 }}" alt="五分组净值" width="707" height="360" loading="lazy" />{% endif %}
-  {% if charts.ls5 %}<img class="chart" src="{{ charts.ls5 }}" alt="五分组多空" width="707" height="360" loading="lazy" />{% endif %}
-</div>
-<h2>分成十组之后，结论是否还在</h2>
-<div class="grid">
-  {% if charts.nav10 %}<img class="chart" src="{{ charts.nav10 }}" alt="十分组净值" width="707" height="360" loading="lazy" />{% endif %}
-  {% if charts.ls10 %}<img class="chart" src="{{ charts.ls10 }}" alt="十分组多空" width="707" height="360" loading="lazy" />{% endif %}
-</div>
+<details class="fold">
+  <summary>报告里的静态图</summary>
+  <p class="hint">这些图在生成研究报告时已经画了坐标轴和图例。页面上的曲线用上面的矢量图，停在点上可看当月数值。</p>
+  <h2>每个月，排序和下月收益是否一致</h2>
+  <p class="hint">纵轴是 Rank IC。大于 0 表示这个月按假设排序是对的。虚线是所有月份的平均。</p>
+  {% if charts.ic %}<img class="chart" src="{{ charts.ic }}" alt="IC 序列" width="707" height="360" loading="lazy" />{% endif %}
+  <h2>因子能管住后面几个月</h2>
+  <p class="hint">横轴 1 是下个月，2 是再下一个月。柱子变矮，说明信号很快过时。</p>
+  {% if charts.decay %}<img class="chart" src="{{ charts.decay }}" alt="IC 衰减" width="707" height="360" loading="lazy" />{% endif %}
+  <h2>五组里，该买的那一组是否在最上面</h2>
+  <p class="hint">股票按因子从低到高分成 5 组。图例里标了「多头」的，才是这个问题要买的一组。它应该高于其他组。</p>
+  <div class="grid">
+    {% if charts.nav5 %}<img class="chart" src="{{ charts.nav5 }}" alt="五分组净值" width="707" height="360" loading="lazy" />{% endif %}
+    {% if charts.ls5 %}<img class="chart" src="{{ charts.ls5 }}" alt="五分组多空" width="707" height="360" loading="lazy" />{% endif %}
+  </div>
+  <h2>分成十组之后，结论是否还在</h2>
+  <div class="grid">
+    {% if charts.nav10 %}<img class="chart" src="{{ charts.nav10 }}" alt="十分组净值" width="707" height="360" loading="lazy" />{% endif %}
+    {% if charts.ls10 %}<img class="chart" src="{{ charts.ls10 }}" alt="十分组多空" width="707" height="360" loading="lazy" />{% endif %}
+  </div>
+</details>
+</section>
 {% endblock %}

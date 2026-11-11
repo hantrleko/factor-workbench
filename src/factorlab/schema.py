@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 
 import polars as pl
 
@@ -39,103 +41,56 @@ class FactorSpec:
         return f"{self.name}_neu"
 
 
-FACTORS: tuple[FactorSpec, ...] = (
-    FactorSpec(
-        name="sloan_accrual",
-        label="应计利润（Sloan）",
-        family="财务质量",
-        direction=-1,
-        question="应计利润更低的股票，下个月收益是否更高？",
-        definition=(
-            "资产负债表法应计利润，用平均总资产缩放。"
-            "高应计往往对应更低的后续收益（Sloan, 1996）。"
-        ),
-        formula=(
-            "[(Δ流动资产 − Δ现金) − (Δ流动负债 − Δ短期借款 − Δ应交税费) − 折旧摊销TTM]"
-            " / 平均总资产"
-        ),
-    ),
-    FactorSpec(
-        name="capex_intensity",
-        label="资本开支强度",
-        family="财务质量",
-        direction=-1,
-        question="资本开支强度更低的股票，下个月收益是否更高？",
-        definition=(
-            "资本开支 TTM / 平均总资产。高资本开支公司后续收益往往更低"
-            "（Titman, Wei, Xie, 2004），因此多头取低资本开支。"
-        ),
-        formula="资本开支TTM / 平均总资产",
-    ),
-    FactorSpec(
-        name="dupont_pm",
-        label="杜邦销售净利率",
-        family="财务质量",
-        direction=1,
-        question="销售净利率更高的股票，下个月收益是否更高？",
-        definition="杜邦分解的盈利能力驱动项。净利润 TTM / 营业收入 TTM。",
-        formula="净利润TTM / 营业收入TTM",
-    ),
-    FactorSpec(
-        name="dupont_at",
-        label="杜邦资产周转率",
-        family="财务质量",
-        direction=1,
-        question="资产周转更快的股票，下个月收益是否更高？",
-        definition="杜邦分解的经营效率驱动项。营业收入 TTM / 平均总资产。",
-        formula="营业收入TTM / 平均总资产",
-    ),
-    FactorSpec(
-        name="dupont_em",
-        label="杜邦权益乘数",
-        family="财务质量",
-        direction=-1,
-        question="杠杆更低的股票，下个月收益是否更高？",
-        definition=(
-            "杜邦分解的杠杆驱动项。平均总资产 / 平均股东权益。"
-            "质量组合默认规避高杠杆，因此方向为做多低权益乘数。"
-            "原始 Rank IC 仍按未翻号的乘数报告。"
-        ),
-        formula="平均总资产 / 平均股东权益",
-    ),
-    FactorSpec(
-        name="amihud",
-        label="Amihud 非流动性",
-        family="市场微观结构",
-        direction=1,
-        question="成交更困难的股票，下个月收益是否更高？",
-        definition=(
-            "月内日频 |收益率| / 成交额 的均值（Amihud, 2002）。"
-            "数值越大，非流动性溢价越高。"
-        ),
-        formula="(1/D) Σ |r_d| / 成交额_d",
-    ),
-    FactorSpec(
-        name="ivol",
-        label="特质波动率",
-        family="市场微观结构",
-        direction=-1,
-        question="特质波动更低的股票，下个月收益是否更高？",
-        definition=(
-            "月内日收益对市值加权市场收益做带截距回归后，残差标准差"
-            "（Ang, Hodrick, Xing, Zhang, 2006 的 CAPM 版本）。"
-            "高特质波动后续收益往往更低。"
-        ),
-        formula="sqrt( SSE / (N − 2) )，N 为月内有效交易日",
-    ),
-    FactorSpec(
-        name="reversal",
-        label="短期反转",
-        family="市场微观结构",
-        direction=1,
-        question="上个月跌得多的股票，这个月是否涨回来？",
-        definition=(
-            "形成月已实现收益的相反数（Jegadeesh, 1990）。"
-            "因子值越高，表示过去一个月跌得越多，做多近期输家。"
-        ),
-        formula="− 形成月收益率",
-    ),
+# 这 8 个名字在 factors 包里有计算函数。配置不能凭空多加一个。
+COMPUTED_FACTORS = frozenset(
+    {
+        "sloan_accrual",
+        "capex_intensity",
+        "dupont_pm",
+        "dupont_at",
+        "dupont_em",
+        "amihud",
+        "ivol",
+        "reversal",
+    }
 )
+
+
+def load_factor_specs(path: Path | None = None) -> tuple[FactorSpec, ...]:
+    """名称、方向和文字读配置文件。没有计算函数的名字会被拒绝。"""
+
+    source = path or Path(__file__).resolve().parents[2] / "config" / "factors.json"
+    rows = json.loads(source.read_text(encoding="utf-8"))
+    specs: list[FactorSpec] = []
+    seen: set[str] = set()
+    for row in rows:
+        if row.get("enabled", True) is False:
+            continue
+        name = str(row["name"])
+        if name in seen:
+            raise ValueError(f"因子配置里 {name} 重复")
+        if name not in COMPUTED_FACTORS:
+            raise ValueError(f"配置里的 {name} 还没有计算函数。不会把它当成新的研究因子。")
+        seen.add(name)
+        specs.append(
+            FactorSpec(
+                name=name,
+                label=str(row["label"]),
+                family=str(row["family"]),
+                direction=int(row["direction"]),
+                question=str(row["question"]),
+                definition=str(row["definition"]),
+                formula=str(row["formula"]),
+            )
+        )
+    missing = COMPUTED_FACTORS - seen
+    if missing:
+        joined = ", ".join(sorted(missing))
+        raise ValueError(f"因子配置缺少已有计算：{joined}")
+    return tuple(specs)
+
+
+FACTORS: tuple[FactorSpec, ...] = load_factor_specs()
 
 
 PRICE_COLUMNS = ("date", "ticker", "close", "volume", "mktcap", "industry")
